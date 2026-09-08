@@ -1,0 +1,12 @@
+{
+  "name": "Shaft UT Planner",
+  "short_name": "Shaft UT",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#ffb020",
+  "icons": [
+    { "src": "icon.png", "sizes": "180x180", "type": "image/png" }
+  ]
+}

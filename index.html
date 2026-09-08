@@ -1,0 +1,1457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Shaft UT">
+<link rel="apple-touch-icon" href="icon.png">
+<link rel="icon" type="image/png" href="icon.png">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#ffb020">
+<title>Shaft UT Planner</title>
+<style>
+  :root{
+    --bg:#f5f3ef; --card:#fffdfa; --text:#1c1c1e; --sub:#6e6e73; --border:#ddd7cc;
+    --accent:#b8720a; --accent2:#d9480f; --danger:#ff3b30; --good:#34c759;
+    --steel:#c9ccd1; --bore:#f5f3ef; --beam:#ff3b30; --spread:#0e8a9c; --ind:#af52de;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#000000; --card:#1c1c1e; --text:#f2f2f7; --sub:#98989d; --border:#38383a;
+      --accent:#ffb020; --accent2:#ff6a3d; --danger:#ff453a; --good:#30d158;
+      --steel:#4a4d52; --bore:#2c2c2e; --beam:#ff453a; --spread:#26c6da; --ind:#bf5af2;
+    }
+  }
+  /* Forces the light palette while the report SVG is generated, so diagram
+     colors are always print-legible even when the app is in dark mode. */
+  :root.pdf-light-force{
+    --bg:#f5f3ef; --card:#fffdfa; --text:#1c1c1e; --sub:#6e6e73; --border:#ddd7cc;
+    --accent:#b8720a; --accent2:#d9480f; --danger:#ff3b30; --good:#34c759;
+    --steel:#c9ccd1; --bore:#f5f3ef; --beam:#ff3b30; --spread:#0e8a9c; --ind:#af52de;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  body{margin:0; background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;
+       padding-bottom:calc(64px + env(safe-area-inset-bottom)); padding-top:env(safe-area-inset-top);}
+  header{position:sticky; top:0; z-index:5; background:var(--bg); padding:14px 16px 8px; }
+  header h1{font-size:20px; margin:0 0 2px; font-weight:700;}
+  header p{margin:0; font-size:12px; color:var(--sub);}
+  main{padding:8px 12px 24px; max-width:640px; margin:0 auto;}
+  .view{display:none;}
+  .view.active{display:block;}
+  .card{background:var(--card); border-radius:14px; padding:14px; margin-bottom:12px; box-shadow:0 1px 2px rgba(0,0,0,0.04); border:1px solid var(--border);}
+  .card h2{font-size:13px; text-transform:uppercase; letter-spacing:0.03em; color:var(--sub); margin:0 0 10px; font-weight:600;}
+  .row{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 0; border-bottom:1px solid var(--border);}
+  .row:last-child{border-bottom:none;}
+  .row label{font-size:15px; flex:1;}
+  .row .hint{display:block; font-size:11px; color:var(--sub); font-weight:400;}
+  input[type=number], input[type=text], select{
+    font-size:15px; padding:7px 10px; border-radius:9px; border:1px solid var(--border);
+    background:var(--bg); color:var(--text); width:110px; text-align:right;
+  }
+  input[type=text]{width:170px; text-align:left;}
+  input[type=range]{ width:100%; accent-color:var(--accent); height:32px; }
+  textarea{ font-size:14px; padding:8px 10px; border-radius:9px; border:1px solid var(--border); background:var(--bg); color:var(--text); width:100%; resize:vertical; font-family:inherit; margin-top:6px; }
+  select{width:auto; text-align:left; -webkit-appearance:none; appearance:none; padding-right:26px;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6'><path d='M0 0l5 6 5-6z' fill='%2398989d'/></svg>");
+    background-repeat:no-repeat; background-position:right 8px center;}
+  .seg{display:flex; background:var(--bg); border-radius:9px; padding:2px; gap:2px;}
+  .seg button{flex:1; border:none; background:transparent; padding:8px 6px; border-radius:7px; font-size:13px; color:var(--text); font-weight:500;}
+  .seg button.active{background:var(--accent); color:#fff;}
+  .section-item{background:var(--bg); border-radius:10px; padding:10px; margin-bottom:8px;}
+  .section-item .top{display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;}
+  .section-item .top strong{font-size:13px; color:var(--sub);}
+  .rm{background:none; border:none; color:var(--danger); font-size:13px; padding:2px 6px;}
+  .field{display:flex; justify-content:space-between; align-items:center; padding:4px 0; font-size:14px;}
+  .field .hint{font-size:10px; color:var(--sub);}
+  .field strong{font-family:var(--mono); color:var(--accent);}
+  .add-btn, .primary-btn{width:100%; padding:12px; border:none; border-radius:10px; background:var(--accent); color:#fff;
+    font-size:15px; font-weight:600; margin-top:4px; transition:transform 0.1s ease, filter 0.1s ease;}
+  .add-btn{background:var(--bg); color:var(--accent); border:1px dashed var(--accent);}
+  .add-btn:active, .primary-btn:active{transform:scale(0.97); filter:brightness(0.92);}
+  .seg button{transition:transform 0.1s ease;}
+  .seg button:active{transform:scale(0.95);}
+  .tab-btn{transition:transform 0.1s ease;}
+  .tab-btn:active{transform:scale(0.92);}
+  .preset-item{display:flex; align-items:center; justify-content:space-between; background:var(--bg); border-radius:10px; padding:9px 12px; margin-bottom:7px; gap:8px;}
+  .preset-item .name{font-size:14px; font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .preset-item .actions{display:flex; gap:4px; flex-shrink:0;}
+  .preset-item button{background:none; border:none; font-size:13px; padding:5px 9px; border-radius:6px; font-weight:600;}
+  .preset-item .load-btn{color:var(--accent);}
+  .preset-item .del-btn{color:var(--danger); font-weight:400;}
+  .tabbar{position:fixed; bottom:0; left:0; right:0; display:flex; background:rgba(255,255,255,0.9); backdrop-filter:blur(20px);
+    border-top:1px solid var(--border); padding-bottom:env(safe-area-inset-bottom); z-index:10;}
+  @media (prefers-color-scheme: dark){ .tabbar{background:rgba(28,28,30,0.85);} }
+  .tabbar button{flex:1; background:none; border:none; padding:10px 2px 8px; color:var(--sub); font-size:10px; display:flex; flex-direction:column; align-items:center; gap:3px;}
+  .tabbar button.active{color:var(--accent);}
+  @media (prefers-color-scheme: dark){ .tabbar button.active svg{ filter:drop-shadow(0 0 3px var(--accent)); } }
+  .tabbar svg{width:20px; height:20px;}
+  svg.diagram{width:100%; height:auto; display:block; background:var(--bg); border-radius:10px;}
+  .legend{display:flex; flex-wrap:wrap; gap:10px; font-size:11px; color:var(--sub); margin-top:8px;}
+  .legend span{display:flex; align-items:center; gap:4px;}
+  .swatch{width:14px; height:3px; border-radius:2px; display:inline-block;}
+  table.results{width:100%; border-collapse:collapse; font-size:13px;}
+  table.results th, table.results td{text-align:left; padding:6px 4px; border-bottom:1px solid var(--border);}
+  table.results th{color:var(--sub); font-weight:500; font-size:11px; text-transform:uppercase;}
+  .flag-ok{color:var(--good); font-weight:600;}
+  .flag-warn{color:var(--accent2); font-weight:600;}
+  .flag-flaw{color:var(--danger); font-weight:600;}
+  .lookup-result{background:var(--bg); border-radius:10px; padding:12px; margin-top:10px; font-size:14px;}
+  .lookup-result .big{font-size:24px; font-weight:700; margin-bottom:2px; font-family:var(--mono); color:var(--accent); letter-spacing:0.01em;}
+  @media (prefers-color-scheme: dark){ .lookup-result .big{ text-shadow:0 0 10px var(--accent); } }
+  svg.diagram text{ font-family:var(--mono); }
+  .note{font-size:11px; color:var(--sub); line-height:1.4; margin-top:8px;}
+  .empty{text-align:center; color:var(--sub); font-size:13px; padding:14px 0;}
+  .slider-row{display:flex; flex-direction:column; align-items:stretch; padding:10px 0 4px; border-bottom:none;}
+  .slider-row label{margin-bottom:2px;}
+  .probe-drag{cursor:grab; touch-action:none;}
+  @keyframes pulseHit{ 0%,100%{ transform:scale(1); opacity:1; } 50%{ transform:scale(1.6); opacity:0.55; } }
+  .cursor-hit{ animation: pulseHit 0.9s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+
+  /* ---- Printable report ---- */
+  #printReport{display:none;}
+  #printReport h1{font-size:19px; margin:0 0 3px; color:#111;}
+  #printReport .meta{font-size:11px; color:#666; margin-bottom:18px;}
+  #printReport h2{font-size:12px; text-transform:uppercase; letter-spacing:0.04em; color:#111;
+    margin:20px 0 8px; padding-bottom:4px; border-bottom:1px solid #ccc; font-weight:700;}
+  #printReport h2:first-of-type{margin-top:4px;}
+  #printReport table{width:100%; border-collapse:collapse; font-size:11.5px; margin-bottom:4px;}
+  #printReport th, #printReport td{text-align:left; padding:5px 7px; border-bottom:1px solid #ddd; color:#111; vertical-align:top;}
+  #printReport th{background:#f2f2f2; font-weight:700; font-size:10.5px; text-transform:uppercase; letter-spacing:0.02em;}
+  #printReport tr{page-break-inside:avoid;}
+  #printReport svg.diagram{width:100%; max-width:640px; height:auto; display:block; margin:6px 0 4px; background:#fff !important;}
+  #printReport .footer{font-size:10px; color:#888; margin-top:22px; padding-top:8px; border-top:1px solid #ddd; line-height:1.4;}
+  #printReport p{font-size:12px; color:#666;}
+  @media print{
+    html, body{background:#fff !important;}
+    body > header, body > main, body > nav.tabbar{display:none !important;}
+    #printReport{display:block !important;}
+    #printReport *{box-shadow:none !important; text-shadow:none !important;}
+    #printReport h2{page-break-after:avoid;}
+    @page{margin:14mm;}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1 id="pageTitle">Probe Setup</h1>
+  <p id="pageSub">Configure the 0&deg; probe used for the scan</p>
+</header>
+
+<main>
+
+  <!-- PROBE VIEW -->
+  <section class="view" id="view-probe">
+    <div class="card">
+      <h2>Probe</h2>
+      <div class="row"><label>Name</label><input type="text" id="probeName" value="Probe 1"></div>
+      <div class="row"><label>Shape</label>
+        <div class="seg" style="width:150px;">
+          <button data-val="circular" class="seg-shape active">Circular</button>
+          <button data-val="rect" class="seg-shape">Rect.</button>
+        </div>
+      </div>
+      <div class="row" id="rowDiameter"><label>Element diameter<span class="hint">mm</span></label><input type="number" id="probeDiameter" value="10" step="0.5" min="0.5"></div>
+      <div class="row" id="rowWidth" style="display:none"><label>Length<span class="hint">mm, along axis</span></label><input type="number" id="probeWidth" value="10" step="0.5" min="0.5"></div>
+      <div class="row" id="rowHeight" style="display:none"><label>Width<span class="hint">mm</span></label><input type="number" id="probeHeight" value="10" step="0.5" min="0.5"></div>
+      <div class="row"><label>Frequency<span class="hint">MHz</span></label><input type="number" id="probeFreq" value="5" step="0.25" min="0.25"></div>
+      <div class="row"><label>Probe zero / delay<span class="hint">&micro;s, wear plate + delay line</span></label><input type="number" id="probeDelay" value="0" step="0.01" min="0"></div>
+    </div>
+
+    <div class="card">
+      <h2>Material / Velocity</h2>
+      <div class="row"><label>Preset</label>
+        <select id="materialPreset">
+          <option value="5920">Carbon / low-alloy steel (5920 m/s)</option>
+          <option value="5790">Stainless steel (5790 m/s)</option>
+          <option value="6320">Aluminium (6320 m/s)</option>
+          <option value="6070">Titanium (6070 m/s)</option>
+          <option value="4430">Brass (4430 m/s)</option>
+          <option value="4660">Copper (4660 m/s)</option>
+          <option value="4600">Cast iron (4600 m/s)</option>
+          <option value="custom">Custom&hellip;</option>
+        </select>
+      </div>
+      <div class="row" id="rowCustomVel" style="display:none"><label>Velocity (longitudinal)<span class="hint">m/s</span></label><input type="number" id="customVelocity" value="5920" step="10" min="500"></div>
+    </div>
+
+    <div class="card" id="probeDerived">
+      <h2>Derived beam characteristics</h2>
+      <div class="field"><span>Near field (N)</span><strong id="outNearField">&mdash;</strong></div>
+      <div class="field"><span>Beam spread half-angle</span><strong id="outSpread">&mdash;</strong></div>
+      <div class="note">Near field = D&sup2;f / 4V. Spread angle uses the 1.22&nbsp;V/(Df) edge-of-beam approximation for a circular unfocused element. Rectangular probes use an equal-area effective diameter &mdash; treat as an estimate, not a precise beam model.</div>
+    </div>
+
+    <div class="card">
+      <h2>Probe presets</h2>
+      <div class="row"><label>Name</label><input type="text" id="probePresetName" placeholder="e.g. 5MHz 10mm"></div>
+      <button class="add-btn" id="saveProbePresetBtn">+ Save current probe as preset</button>
+      <div id="probePresetList" style="margin-top:10px;"></div>
+    </div>
+  </section>
+
+  <!-- SHAFT VIEW -->
+  <section class="view" id="view-shaft">
+    <div class="card">
+      <h2>Scan configuration</h2>
+      <div class="row"><label>Scan direction</label>
+        <div class="seg" style="width:170px;">
+          <button data-val="axial" class="seg-mode active">Axial (end)</button>
+          <button data-val="radial" class="seg-mode">Radial (OD)</button>
+        </div>
+      </div>
+      <div class="row" id="rowEntryEnd"><label>Probe on</label>
+        <div class="seg" style="width:150px;">
+          <button data-val="near" class="seg-end active">Near end</button>
+          <button data-val="far" class="seg-end">Far end</button>
+        </div>
+      </div>
+      <div class="row" id="rowRadialSection"><label>Inspect at section</label>
+        <select id="radialSectionSelect"></select>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Shaft sections <span style="font-weight:400; color:var(--sub); text-transform:none;">(entry end first)</span></h2>
+      <div id="sectionsList"></div>
+      <button class="add-btn" id="addSectionBtn">+ Add section</button>
+      <div class="note">Each section is a length of constant outer diameter (OD). Set an inside diameter (ID) greater than 0 to model a bore (hollow section) &mdash; useful for radial wall-thickness checks. Sections are listed in order starting from the end you enter the beam.</div>
+    </div>
+
+    <div class="card">
+      <h2>Shaft presets</h2>
+      <div class="row"><label>Name</label><input type="text" id="shaftPresetName" placeholder="e.g. Pump shaft A"></div>
+      <button class="add-btn" id="saveShaftPresetBtn">+ Save current shaft as preset</button>
+      <div id="shaftPresetList" style="margin-top:10px;"></div>
+    </div>
+  </section>
+
+  <!-- SCAN PLAN VIEW -->
+  <section class="view" id="view-plan">
+    <div class="card">
+      <h2 id="diagTitle">Beam path</h2>
+      <svg class="diagram" id="diagram" viewBox="0 0 600 260" preserveAspectRatio="xMidYMid meet"></svg>
+      <div class="legend">
+        <span><i class="swatch" style="background:var(--beam)"></i>Beam / reflection</span>
+        <span><i class="swatch" style="background:var(--spread)"></i>Beam spread edge</span>
+        <span><i class="swatch" style="background:var(--accent)"></i>Indicated echo (manual entry)</span>
+      </div>
+      <div class="note" id="diagramNote"></div>
+    </div>
+
+    <div class="card">
+      <h2>Expected reflectors</h2>
+      <div id="resultsTableWrap"><table class="results" id="resultsTable"><thead><tr><th>Feature</th><th>Depth</th><th>Time</th><th></th></tr></thead><tbody></tbody></table></div>
+    </div>
+
+    <div class="card">
+      <h2>Locate a measured echo</h2>
+      <div class="row"><label>Instrument reading<span class="hint">&micro;s, total elapsed time on screen</span></label><input type="number" id="measuredTime" step="0.01" min="0" placeholder="e.g. 42.5"></div>
+      <div class="row"><label>Match tolerance<span class="hint">mm, blank = auto (&asymp;1 wavelength)</span></label><input type="number" id="tolerance" step="0.5" min="0" placeholder="auto"></div>
+      <div class="lookup-result" id="lookupResult" style="display:none;"></div>
+    </div>
+  </section>
+
+  <!-- LIVE SCAN VIEW -->
+  <section class="view" id="view-live">
+    <div class="card">
+      <h2>Live scan configuration</h2>
+      <div class="row"><label>Scan direction</label>
+        <div class="seg" style="width:170px;">
+          <button data-val="axial" class="seg-mode">Axial (end)</button>
+          <button data-val="radial" class="seg-mode">Radial (OD)</button>
+        </div>
+      </div>
+      <div class="row" id="liveEntryRow"><label>Probe on</label>
+        <div class="seg" style="width:150px;">
+          <button data-val="near" class="seg-end">Near end</button>
+          <button data-val="far" class="seg-end">Far end</button>
+        </div>
+      </div>
+      <div class="row slider-row" id="liveOffsetRow">
+        <label>Probe offset from centreline<span class="hint">mm, up/down on the end face</span></label>
+        <input type="range" id="liveOffsetSlider" min="-30" max="30" value="0" step="1">
+      </div>
+      <div class="row slider-row">
+        <label id="liveSliderLabel">Probe position</label>
+        <input type="range" id="liveSlider" min="0" max="100" value="0" step="1">
+      </div>
+    </div>
+
+    <div class="card">
+      <svg class="diagram" id="liveDiagram" viewBox="0 0 600 260" preserveAspectRatio="xMidYMid meet"></svg>
+      <div class="lookup-result" id="liveReadout"></div>
+      <div class="note">Drag the slider to move the probe. In axial mode it scrubs the pulse depth from the entry face; in radial mode it moves the probe physically along the OD, showing the local wall depth as it changes with each section. In axial mode you can also grab the blue probe block in the diagram and drag it to the other end face.</div>
+    </div>
+  </section>
+
+  <!-- ANALYSIS VIEW -->
+  <section class="view" id="view-analysis">
+    <div class="card">
+      <h2>Add indication</h2>
+      <div class="row"><label>Type</label>
+        <div class="seg" style="width:150px;">
+          <button data-val="axial" class="seg-indtype active">Axial</button>
+          <button data-val="radial" class="seg-indtype">Radial</button>
+        </div>
+      </div>
+      <div class="row"><label>Label<span class="hint">optional</span></label><input type="text" id="indLabel" placeholder="e.g. near keyway"></div>
+
+      <div id="indAxialFields">
+        <div class="row"><label>Measured from</label>
+          <div class="seg" style="width:150px;">
+            <button data-val="near" class="seg-indend active">Near end</button>
+            <button data-val="far" class="seg-indend">Far end</button>
+          </div>
+        </div>
+        <div class="row"><label>Instrument reading<span class="hint">&micro;s, optional &mdash; fills depth below</span></label><input type="number" id="indTimeAxial" step="0.01" placeholder="e.g. 42.5"></div>
+        <div class="row"><label>Depth from that end<span class="hint">mm</span></label><input type="number" id="indDepthAxial" step="0.5"></div>
+      </div>
+
+      <div id="indRadialFields" style="display:none;">
+        <div class="row"><label>Axial position<span class="hint">mm from near end</span></label><input type="number" id="indAxialPos" step="1"></div>
+        <div class="row"><label>Instrument reading<span class="hint">&micro;s, optional &mdash; fills depth below</span></label><input type="number" id="indTimeRadial" step="0.01" placeholder="e.g. 13.5"></div>
+        <div class="row"><label>Depth from OD<span class="hint">mm</span></label><input type="number" id="indDepthRadial" step="0.5"></div>
+        <div class="row"><label>Clock position<span class="hint">optional</span></label><input type="text" id="indClock" placeholder="e.g. 3 o'clock"></div>
+      </div>
+
+      <div class="row"><label>Amplitude<span class="hint">%, optional</span></label><input type="number" id="indAmplitude" step="1" min="0" max="200"></div>
+      <div class="row slider-row"><label>Notes</label><textarea id="indNotes" rows="2" placeholder="optional"></textarea></div>
+
+      <button class="add-btn" id="addIndicationBtn" style="margin-top:10px;">+ Add indication</button>
+    </div>
+
+    <div class="card">
+      <h2>Recorded indications</h2>
+      <div id="indicationsList"></div>
+    </div>
+
+    <div class="card">
+      <h2>Marked-up shaft</h2>
+      <svg class="diagram" id="analysisDiagram" viewBox="0 0 600 260" preserveAspectRatio="xMidYMid meet"></svg>
+      <div class="legend">
+        <span><i class="swatch" style="background:var(--ind)"></i>Recorded indication</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Report</h2>
+      <button class="primary-btn" id="generateReportBtn">Generate PDF report</button>
+      <div class="note">Opens the print dialog. On iPhone, tap the share icon in the print preview and choose "Save PDF to Files" (or print to a physical printer). The report includes the probe, shaft geometry, scan configuration and every indication above.</div>
+    </div>
+
+    <div class="card">
+      <h2>Backup & restore</h2>
+      <div class="note">Everything is saved automatically in this browser, but a Home Screen app on iOS can have its storage cleared by the system after long periods of disuse. Export a backup now and then, and keep the text somewhere safe (Notes, email to yourself, etc).</div>
+      <button class="add-btn" id="exportDataBtn" style="margin-top:8px;">Export all data to text below</button>
+      <textarea id="backupText" rows="4" placeholder="Backup text will appear here — copy it somewhere safe" style="margin-top:8px; font-size:11px;"></textarea>
+      <button class="add-btn" id="importDataBtn" style="margin-top:8px;">Restore from pasted backup above</button>
+      <div id="backupStatus" class="note"></div>
+    </div>
+  </section>
+
+</main>
+
+<div id="printReport"></div>
+
+<nav class="tabbar">
+  <button class="tab-btn active" data-view="probe">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.5-7 8-7s8 3 8 7"/></svg>
+    Probe
+  </button>
+  <button class="tab-btn" data-view="shaft">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="9" width="7" height="6" rx="1"/><rect x="10" y="7" width="11" height="10" rx="1"/></svg>
+    Shaft
+  </button>
+  <button class="tab-btn" data-view="plan">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 12h4l2-7 4 14 2-7h6"/></svg>
+    Plan
+  </button>
+  <button class="tab-btn" data-view="live">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5" fill="currentColor" stroke="none"/></svg>
+    Live
+  </button>
+  <button class="tab-btn" data-view="analysis">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
+    Analysis
+  </button>
+</nav>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ---------- State ---------- */
+  var state = {
+    probe:{ name:"Probe 1", shape:"circular", diameter:10, width:10, height:10, frequency:5, delay:0 },
+    velocity: 5920, // m/s
+    scan:{ mode:"axial", entryEnd:"near", radialIndex:0 },
+    sections:[ {od:60, len:300, id:0}, {od:40, len:200, id:0} ],
+    measuredTime:null,
+    tolerance:null,
+    live:{ axialDepth:0, radialPos:0, axialOffset:0 },
+    probePresets:[],
+    shaftPresets:[],
+    indications:[]
+  };
+
+  function mergeLoadedState(parsed){
+    Object.assign(state, parsed);
+    // state.live gained fields (axialOffset) after some saves/backups already existed with
+    // the older shape; Object.assign replaces the whole sub-object, so merge it against
+    // defaults instead of trusting it has every current field.
+    state.live = Object.assign({ axialDepth:0, radialPos:0, axialOffset:0 }, parsed.live||{});
+  }
+  function load(){
+    try{
+      var raw = localStorage.getItem("shaftut_state_v1");
+      if(raw){
+        mergeLoadedState(JSON.parse(raw));
+      }
+    }catch(e){ /* localStorage unavailable, use defaults */ }
+  }
+  function save(){
+    try{ localStorage.setItem("shaftut_state_v1", JSON.stringify(state)); }catch(e){}
+  }
+  load();
+
+  /* ---------- Helpers ---------- */
+  function $(id){ return document.getElementById(id); }
+  function fmt(n, d){ if(n===null||n===undefined||!isFinite(n)) return "—"; d = d===undefined?2:d; return (Math.round(n*Math.pow(10,d))/Math.pow(10,d)).toString(); }
+  function uid(){ return "id"+Date.now()+Math.floor(Math.random()*10000); }
+  function deepCopy(o){ return JSON.parse(JSON.stringify(o)); }
+
+  function velocityMmUs(){ return state.velocity/1000; }
+
+  function effectiveDiameter(){
+    var p = state.probe;
+    if(p.shape==="circular") return p.diameter;
+    return Math.sqrt(4*p.width*p.height/Math.PI);
+  }
+
+  function nearField(){
+    var D = effectiveDiameter(), f = state.probe.frequency, V = velocityMmUs();
+    if(!D||!f||!V) return NaN;
+    return (D*D*f)/(4*V);
+  }
+
+  function spreadAngleRad(){
+    var D = effectiveDiameter(), f = state.probe.frequency, V = velocityMmUs();
+    if(!D||!f||!V) return NaN;
+    var s = 1.22*V/(D*f);
+    if(s>1) s=1;
+    return Math.asin(s);
+  }
+
+  function beamRadiusAtDepth(depth){
+    var N = nearField();
+    var elemR = effectiveDiameter()/2;
+    if(depth<=N || isNaN(N)) return elemR;
+    return elemR + (depth-N)*Math.tan(spreadAngleRad());
+  }
+
+  function depthFromTime(t){
+    return velocityMmUs()*(t - state.probe.delay)/2;
+  }
+  function timeFromDepth(depth){
+    return 2*depth/velocityMmUs() + state.probe.delay;
+  }
+
+  function totalLength(){
+    return state.sections.reduce(function(s,sec){ return s+Number(sec.len||0); }, 0);
+  }
+
+  // physical x (from left / near end) -> section index
+  function sectionAtX(x){
+    var acc=0;
+    for(var i=0;i<state.sections.length;i++){
+      var len = Number(state.sections[i].len||0);
+      if(x <= acc+len || i===state.sections.length-1) return i;
+      acc += len;
+    }
+    return state.sections.length-1;
+  }
+
+  function sectionStarts(){
+    var acc=0, out=[];
+    state.sections.forEach(function(s){ out.push(acc); acc += Number(s.len||0); });
+    return out;
+  }
+
+  // depth from entry -> physical x from left
+  function xFromDepth(depth){
+    return state.scan.entryEnd==="near" ? depth : totalLength()-depth;
+  }
+  function depthFromX(x){
+    return state.scan.entryEnd==="near" ? x : totalLength()-x;
+  }
+
+  /* ---------- Axial feature list ---------- */
+  function axialFeatures(){
+    var feats = [];
+    var starts = sectionStarts();
+    var total = totalLength();
+    for(var i=1;i<state.sections.length;i++){
+      var prev = state.sections[i-1], cur = state.sections[i];
+      if(Number(prev.od)!==Number(cur.od) || Number(prev.id||0)!==Number(cur.id||0)){
+        var x = starts[i];
+        var depth = depthFromX(x);
+        feats.push({
+          label: "Step Ø"+fmt(prev.od,0)+"→Ø"+fmt(cur.od,0),
+          x:x, depth:depth, time:timeFromDepth(depth)
+        });
+      }
+    }
+    feats.push({ label:"Far end face", x: total, depth: depthFromX(total), time: timeFromDepth(depthFromX(total)) });
+    feats.sort(function(a,b){ return a.depth-b.depth; });
+    feats.forEach(function(f){
+      var localSectionIdx = sectionAtX(Math.min(Math.max(f.x, 0.001), total-0.001));
+      var localOD = state.sections[localSectionIdx] ? state.sections[localSectionIdx].od : null;
+      if(localOD!=null){
+        var br = beamRadiusAtDepth(f.depth);
+        f.warn = br > (localOD/2);
+      }
+    });
+    return feats;
+  }
+
+  /* ---------- Radial calc ---------- */
+  function radialData(){
+    var idx = Math.min(state.scan.radialIndex, state.sections.length-1);
+    var sec = state.sections[idx] || {od:0,id:0};
+    var hollow = Number(sec.id||0) > 0 && Number(sec.id) < Number(sec.od);
+    var depth = hollow ? (sec.od - sec.id)/2 : sec.od;
+    return { section: sec, index: idx, hollow: hollow, depth: depth, time: timeFromDepth(depth) };
+  }
+
+  /* ---------- UI: view switching ---------- */
+  var titles = {
+    probe:["Probe Setup","Configure the 0° probe used for the scan"],
+    shaft:["Shaft Geometry","Build the stepped shaft profile"],
+    plan:["Scan Plan","Idealised reflectors for the current setup"],
+    live:["Live Scan","Slide the probe and watch the beam move"],
+    analysis:["Analysis Mode","Record indications and generate a report"]
+  };
+  function showView(name){
+    document.querySelectorAll(".view").forEach(function(v){ v.classList.remove("active"); });
+    $("view-"+name).classList.add("active");
+    document.querySelectorAll(".tab-btn").forEach(function(b){ b.classList.toggle("active", b.dataset.view===name); });
+    $("pageTitle").textContent = titles[name][0];
+    $("pageSub").textContent = titles[name][1];
+    refreshScanConfigUI();
+    if(name==="shaft") renderRadialSelect();
+    if(name==="plan") renderPlan();
+    if(name==="live") renderLive();
+    if(name==="analysis") renderAnalysis();
+  }
+  document.querySelectorAll(".tab-btn").forEach(function(b){
+    b.addEventListener("click", function(){ showView(b.dataset.view); });
+  });
+
+  /* ---------- Probe form binding ---------- */
+  function bindProbeForm(){
+    $("probeName").value = state.probe.name;
+    $("probeDiameter").value = state.probe.diameter;
+    $("probeWidth").value = state.probe.width;
+    $("probeHeight").value = state.probe.height;
+    $("probeFreq").value = state.probe.frequency;
+    $("probeDelay").value = state.probe.delay;
+    document.querySelectorAll(".seg-shape").forEach(function(b){ b.classList.toggle("active", b.dataset.val===state.probe.shape); });
+    $("rowDiameter").style.display = state.probe.shape==="circular" ? "flex":"none";
+    $("rowWidth").style.display = state.probe.shape==="rect" ? "flex":"none";
+    $("rowHeight").style.display = state.probe.shape==="rect" ? "flex":"none";
+
+    var known = [5920,5790,6320,6070,4430,4660,4600];
+    if(known.indexOf(state.velocity)>-1){
+      $("materialPreset").value = state.velocity;
+      $("rowCustomVel").style.display="none";
+    } else {
+      $("materialPreset").value = "custom";
+      $("rowCustomVel").style.display="flex";
+      $("customVelocity").value = state.velocity;
+    }
+    updateDerived();
+  }
+  function updateDerived(){
+    var N = nearField(), ang = spreadAngleRad();
+    $("outNearField").textContent = isNaN(N) ? "—" : fmt(N,1)+" mm";
+    $("outSpread").textContent = isNaN(ang) ? "—" : "±"+fmt(ang*180/Math.PI,1)+"°";
+  }
+
+  $("probeName").addEventListener("input", function(){ state.probe.name=this.value; save(); });
+  $("probeDiameter").addEventListener("input", function(){ state.probe.diameter=parseFloat(this.value)||0; updateDerived(); save(); });
+  $("probeWidth").addEventListener("input", function(){ state.probe.width=parseFloat(this.value)||0; updateDerived(); save(); });
+  $("probeHeight").addEventListener("input", function(){ state.probe.height=parseFloat(this.value)||0; updateDerived(); save(); });
+  $("probeFreq").addEventListener("input", function(){ state.probe.frequency=parseFloat(this.value)||0; updateDerived(); save(); });
+  $("probeDelay").addEventListener("input", function(){ state.probe.delay=parseFloat(this.value)||0; save(); });
+
+  document.querySelectorAll(".seg-shape").forEach(function(b){
+    b.addEventListener("click", function(){
+      state.probe.shape = b.dataset.val;
+      bindProbeForm(); save();
+    });
+  });
+
+  $("materialPreset").addEventListener("change", function(){
+    if(this.value==="custom"){
+      $("rowCustomVel").style.display="flex";
+      state.velocity = parseFloat($("customVelocity").value)||5920;
+    } else {
+      $("rowCustomVel").style.display="none";
+      state.velocity = parseFloat(this.value);
+    }
+    updateDerived(); save();
+  });
+  $("customVelocity").addEventListener("input", function(){
+    state.velocity = parseFloat(this.value)||0; updateDerived(); save();
+  });
+
+  /* ---------- Probe presets ---------- */
+  function renderProbePresets(){
+    var wrap = $("probePresetList");
+    wrap.innerHTML = "";
+    if(state.probePresets.length===0){ wrap.innerHTML = '<div class="empty">No saved probe presets yet.</div>'; return; }
+    state.probePresets.forEach(function(p){
+      var div = document.createElement("div");
+      div.className = "preset-item";
+      div.innerHTML = '<span class="name">'+p.name+'</span><span class="actions"><button class="load-btn" data-id="'+p.id+'">Load</button><button class="del-btn" data-id="'+p.id+'">Delete</button></span>';
+      wrap.appendChild(div);
+    });
+    wrap.querySelectorAll(".load-btn").forEach(function(b){ b.addEventListener("click", function(){ loadProbePreset(this.dataset.id); }); });
+    wrap.querySelectorAll(".del-btn").forEach(function(b){ b.addEventListener("click", function(){ deleteProbePreset(this.dataset.id); }); });
+  }
+  function loadProbePreset(id){
+    var p = state.probePresets.find(function(x){ return x.id===id; });
+    if(!p) return;
+    state.probe = deepCopy(p.probe);
+    state.velocity = p.velocity;
+    bindProbeForm(); save();
+  }
+  function deleteProbePreset(id){
+    state.probePresets = state.probePresets.filter(function(x){ return x.id!==id; });
+    save(); renderProbePresets();
+  }
+  $("saveProbePresetBtn").addEventListener("click", function(){
+    var nameInput = $("probePresetName");
+    var name = nameInput.value.trim() || ("Probe preset "+(state.probePresets.length+1));
+    state.probePresets.push({ id:uid(), name:name, probe:deepCopy(state.probe), velocity:state.velocity });
+    nameInput.value = "";
+    save(); renderProbePresets();
+  });
+
+  /* ---------- Shaft form binding ---------- */
+  function refreshScanConfigUI(){
+    document.querySelectorAll(".seg-mode").forEach(function(b){ b.classList.toggle("active", b.dataset.val===state.scan.mode); });
+    document.querySelectorAll(".seg-end").forEach(function(b){ b.classList.toggle("active", b.dataset.val===state.scan.entryEnd); });
+    var axial = state.scan.mode==="axial";
+    $("rowEntryEnd").style.display = axial ? "flex":"none";
+    $("rowRadialSection").style.display = axial ? "none":"flex";
+    $("liveEntryRow").style.display = axial ? "flex":"none";
+    $("liveOffsetRow").style.display = axial ? "flex":"none";
+  }
+
+  function entrySection(){
+    if(!state.sections.length) return null;
+    return state.scan.entryEnd==="near" ? state.sections[0] : state.sections[state.sections.length-1];
+  }
+  function clampOffset(o){
+    var sec = entrySection();
+    if(!sec) return 0;
+    var maxR = sec.od/2;
+    var minR = (Number(sec.id||0) > 0 && Number(sec.id) < Number(sec.od)) ? sec.id/2 : 0;
+    var sign = o < 0 ? -1 : 1;
+    var mag = Math.min(maxR, Math.max(minR, Math.abs(o)));
+    return sign * mag;
+  }
+  function offsetClipDepth(offset){
+    var total = totalLength();
+    if(total<=0) return null;
+    var steps = 60;
+    for(var i=1;i<=steps;i++){
+      var d = total*i/steps;
+      var xFromLeft = state.scan.entryEnd==="near" ? d : total-d;
+      var idx = sectionAtX(Math.min(Math.max(xFromLeft,0.001), total-0.001));
+      var localR = state.sections[idx].od/2;
+      if(Math.abs(offset) + beamRadiusAtDepth(d) > localR) return d;
+    }
+    return null;
+  }
+  document.querySelectorAll(".seg-mode").forEach(function(b){
+    b.addEventListener("click", function(){
+      state.scan.mode = b.dataset.val;
+      refreshScanConfigUI(); save();
+      if($("view-plan").classList.contains("active")) renderPlan();
+      if($("view-live").classList.contains("active")) renderLive();
+    });
+  });
+  document.querySelectorAll(".seg-end").forEach(function(b){
+    b.addEventListener("click", function(){
+      state.scan.entryEnd = b.dataset.val;
+      refreshScanConfigUI(); save();
+      if($("view-plan").classList.contains("active")) renderPlan();
+      if($("view-live").classList.contains("active")) renderLive();
+    });
+  });
+  $("radialSectionSelect").addEventListener("change", function(){
+    state.scan.radialIndex = parseInt(this.value,10); save();
+  });
+
+  function renderRadialSelect(){
+    var sel = $("radialSectionSelect");
+    sel.innerHTML = "";
+    state.sections.forEach(function(s,i){
+      var opt = document.createElement("option");
+      opt.value = i;
+      opt.textContent = "Section "+(i+1)+" (Ø"+fmt(s.od,0)+(Number(s.id||0)>0 ? " / IDØ"+fmt(s.id,0):"")+")";
+      sel.appendChild(opt);
+    });
+    if(state.scan.radialIndex >= state.sections.length) state.scan.radialIndex = 0;
+    sel.value = state.scan.radialIndex;
+  }
+
+  function renderSections(){
+    var wrap = $("sectionsList");
+    wrap.innerHTML = "";
+    if(state.sections.length===0){
+      wrap.innerHTML = '<div class="empty">No sections yet &mdash; add one below.</div>';
+      return;
+    }
+    state.sections.forEach(function(sec, i){
+      var div = document.createElement("div");
+      div.className = "section-item";
+      div.innerHTML =
+        '<div class="top"><strong>Section '+(i+1)+(i===0?" (entry face)":"")+'</strong>'+
+        (state.sections.length>1 ? '<button class="rm" data-i="'+i+'">Remove</button>' : '')+'</div>'+
+        '<div class="field"><span>Outer diameter (OD)</span><input type="number" class="sec-od" data-i="'+i+'" value="'+sec.od+'" step="1" min="1" style="width:90px"> mm</div>'+
+        '<div class="field"><span>Length</span><input type="number" class="sec-len" data-i="'+i+'" value="'+sec.len+'" step="5" min="1" style="width:90px"> mm</div>'+
+        '<div class="field"><span>Inside diameter (ID, 0=solid)</span><input type="number" class="sec-id" data-i="'+i+'" value="'+(sec.id||0)+'" step="1" min="0" style="width:90px"> mm</div>';
+      wrap.appendChild(div);
+    });
+    wrap.querySelectorAll(".sec-od").forEach(function(inp){ inp.addEventListener("input", function(){ state.sections[+this.dataset.i].od = Math.max(0.1, parseFloat(this.value)||0); save(); }); });
+    wrap.querySelectorAll(".sec-len").forEach(function(inp){ inp.addEventListener("input", function(){ state.sections[+this.dataset.i].len = Math.max(0.1, parseFloat(this.value)||0); save(); }); });
+    wrap.querySelectorAll(".sec-id").forEach(function(inp){ inp.addEventListener("input", function(){ state.sections[+this.dataset.i].id = Math.max(0, parseFloat(this.value)||0); save(); }); });
+    wrap.querySelectorAll(".rm").forEach(function(btn){ btn.addEventListener("click", function(){ state.sections.splice(+this.dataset.i,1); renderSections(); renderRadialSelect(); save(); }); });
+  }
+  $("addSectionBtn").addEventListener("click", function(){
+    var last = state.sections[state.sections.length-1];
+    state.sections.push({ od: last ? Math.max(10, last.od-10) : 50, len: last ? last.len : 200, id:0 });
+    renderSections(); renderRadialSelect(); save();
+  });
+
+  /* ---------- Shaft presets ---------- */
+  function renderShaftPresets(){
+    var wrap = $("shaftPresetList");
+    wrap.innerHTML = "";
+    if(state.shaftPresets.length===0){ wrap.innerHTML = '<div class="empty">No saved shaft presets yet.</div>'; return; }
+    state.shaftPresets.forEach(function(p){
+      var div = document.createElement("div");
+      div.className = "preset-item";
+      div.innerHTML = '<span class="name">'+p.name+'</span><span class="actions"><button class="load-btn" data-id="'+p.id+'">Load</button><button class="del-btn" data-id="'+p.id+'">Delete</button></span>';
+      wrap.appendChild(div);
+    });
+    wrap.querySelectorAll(".load-btn").forEach(function(b){ b.addEventListener("click", function(){ loadShaftPreset(this.dataset.id); }); });
+    wrap.querySelectorAll(".del-btn").forEach(function(b){ b.addEventListener("click", function(){ deleteShaftPreset(this.dataset.id); }); });
+  }
+  function loadShaftPreset(id){
+    var p = state.shaftPresets.find(function(x){ return x.id===id; });
+    if(!p) return;
+    state.sections = deepCopy(p.sections);
+    renderSections(); renderRadialSelect(); save();
+  }
+  function deleteShaftPreset(id){
+    state.shaftPresets = state.shaftPresets.filter(function(x){ return x.id!==id; });
+    save(); renderShaftPresets();
+  }
+  $("saveShaftPresetBtn").addEventListener("click", function(){
+    var nameInput = $("shaftPresetName");
+    var name = nameInput.value.trim() || ("Shaft preset "+(state.shaftPresets.length+1));
+    state.shaftPresets.push({ id:uid(), name:name, sections:deepCopy(state.sections) });
+    nameInput.value = "";
+    save(); renderShaftPresets();
+  });
+
+  /* ---------- Shared shaft-profile drawing ---------- */
+  function svgEl(tag, attrs){
+    var el = document.createElementNS("http://www.w3.org/2000/svg", tag);
+    for(var k in attrs) el.setAttribute(k, attrs[k]);
+    return el;
+  }
+  function css(name){ return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+
+  function drawShaftProfileSVG(svg){
+    svg.innerHTML = "";
+    var total = totalLength();
+    if(total<=0 || state.sections.length===0){
+      svg.setAttribute("viewBox","0 0 600 260");
+      var t = svgEl("text",{x:300,y:130,"text-anchor":"middle",fill:css("--sub"),"font-size":14});
+      t.textContent = "Add shaft sections to see the beam path";
+      svg.appendChild(t);
+      return null;
+    }
+    var W=600, H=260, padX=50;
+    var plotW = W - padX*2;
+    var maxOD = Math.max.apply(null, state.sections.map(function(s){return s.od;}));
+    var scaleX = plotW/total;
+    var maxDrawH = 100;
+    var scaleY = maxDrawH/maxOD;
+    var cy = H/2;
+    svg.setAttribute("viewBox","0 0 "+W+" "+H);
+
+    var starts = sectionStarts();
+    state.sections.forEach(function(sec,i){
+      var x = padX + starts[i]*scaleX;
+      var w = Math.max(1, sec.len*scaleX);
+      var h = sec.od*scaleY;
+      svg.appendChild(svgEl("rect",{x:x,y:cy-h/2,width:w,height:h,fill:css("--steel"),stroke:css("--sub"),"stroke-width":1}));
+      if(Number(sec.id||0)>0 && Number(sec.id)<Number(sec.od)){
+        var hi = sec.id*scaleY;
+        svg.appendChild(svgEl("rect",{x:x,y:cy-hi/2,width:w,height:hi,fill:css("--bore"),stroke:css("--sub"),"stroke-width":0.5,"stroke-dasharray":"2,2"}));
+      }
+      if(i>0){
+        svg.appendChild(svgEl("line",{x1:x,y1:cy-Math.max(h,state.sections[i-1].od*scaleY)/2-4,x2:x,y2:cy+Math.max(h,state.sections[i-1].od*scaleY)/2+4,stroke:css("--sub"),"stroke-width":1}));
+      }
+      var lt = svgEl("text",{x:x+w/2,y:cy+maxDrawH/2+18,"text-anchor":"middle",fill:css("--sub"),"font-size":9});
+      lt.textContent = fmt(sec.len,0)+"mm";
+      svg.appendChild(lt);
+    });
+    svg.appendChild(svgEl("line",{x1:padX,y1:cy,x2:padX+plotW,y2:cy,stroke:css("--sub"),"stroke-width":0.5,"stroke-dasharray":"4,3"}));
+
+    return {W:W,H:H,padX:padX,plotW:plotW,scaleX:scaleX,scaleY:scaleY,cy:cy,maxDrawH:maxDrawH,total:total,maxOD:maxOD};
+  }
+
+  /* ---------- Scan Plan ---------- */
+  function renderPlan(){
+    if(state.scan.mode==="axial") renderPlanAxialDiagram(); else renderPlanRadialDiagram();
+    renderResultsTable();
+    evalLookup();
+  }
+
+  function renderResultsTable(){
+    var tbody = document.querySelector("#resultsTable tbody");
+    tbody.innerHTML = "";
+    if(state.scan.mode==="axial"){
+      axialFeatures().forEach(function(f){
+        var tr = document.createElement("tr");
+        tr.innerHTML = "<td>"+f.label+(f.warn?' <span class="flag-warn">&#9888;</span>':'')+"</td><td>"+fmt(f.depth,1)+" mm</td><td>"+fmt(f.time,2)+" &micro;s</td><td></td>";
+        tbody.appendChild(tr);
+      });
+    } else {
+      var r = radialData();
+      var tr = document.createElement("tr");
+      tr.innerHTML = "<td>"+(r.hollow?"ID / bore wall":"Far OD (backwall)")+"</td><td>"+fmt(r.depth,1)+" mm</td><td>"+fmt(r.time,2)+" &micro;s</td><td></td>";
+      tbody.appendChild(tr);
+      if(!r.hollow){
+        for(var n=2;n<=3;n++){
+          var tr2 = document.createElement("tr");
+          tr2.innerHTML = "<td>Multiple backwall echo #"+n+"</td><td>"+fmt(r.depth*n,1)+" mm (path)</td><td>"+fmt(timeFromDepth(r.depth*n),2)+" &micro;s</td><td></td>";
+          tbody.appendChild(tr2);
+        }
+      }
+    }
+  }
+
+  function renderPlanAxialDiagram(){
+    $("diagTitle").textContent = "Axial beam path (end-face scan)";
+    var svg = $("diagram");
+    var geo = drawShaftProfileSVG(svg);
+    if(!geo){ $("diagramNote").textContent = ""; return; }
+    var padX=geo.padX, plotW=geo.plotW, scaleX=geo.scaleX, scaleY=geo.scaleY, cy=geo.cy, maxDrawH=geo.maxDrawH, total=geo.total;
+
+    var entryX = state.scan.entryEnd==="near" ? padX : padX+plotW;
+    var dir = state.scan.entryEnd==="near" ? 1 : -1;
+    svg.appendChild(svgEl("rect",{x: dir===1? entryX-10:entryX, y:cy-16, width:10, height:32, fill:css("--accent")}));
+
+    var N = nearField();
+    var elemR = effectiveDiameter()/2;
+    var ang = spreadAngleRad();
+    if(!isNaN(N) && !isNaN(ang)){
+      var pathTop = "M "+entryX+" "+(cy-elemR*scaleY);
+      var pathBot = "M "+entryX+" "+(cy+elemR*scaleY);
+      var nEndDepth = Math.min(N, total);
+      var nEndX = entryX + dir*nEndDepth*scaleX;
+      pathTop += " L "+nEndX+" "+(cy-elemR*scaleY);
+      pathBot += " L "+nEndX+" "+(cy+elemR*scaleY);
+      if(N < total){
+        var farDepth = total;
+        var farR = beamRadiusAtDepth(farDepth)*scaleY;
+        var farX = entryX + dir*farDepth*scaleX;
+        pathTop += " L "+farX+" "+(cy-farR);
+        pathBot += " L "+farX+" "+(cy+farR);
+      }
+      svg.appendChild(svgEl("path",{d:pathTop, stroke:css("--spread"), "stroke-width":1.2, fill:"none", "stroke-dasharray":"3,2"}));
+      svg.appendChild(svgEl("path",{d:pathBot, stroke:css("--spread"), "stroke-width":1.2, fill:"none", "stroke-dasharray":"3,2"}));
+    }
+
+    svg.appendChild(svgEl("line",{x1:entryX,y1:cy,x2: entryX+dir*total*scaleX, y2:cy, stroke:css("--beam"), "stroke-width":2}));
+
+    var feats = axialFeatures();
+    feats.forEach(function(f,idx){
+      var x = entryX + dir*f.depth*scaleX;
+      svg.appendChild(svgEl("circle",{cx:x,cy:cy,r:4,fill: f.warn?css("--accent2"):css("--beam")}));
+      var labelY = cy - maxDrawH/2 - 10 - (idx%2)*14;
+      svg.appendChild(svgEl("line",{x1:x,y1:cy,x2:x,y2:labelY+4,stroke:css("--sub"),"stroke-width":0.5}));
+      var t = svgEl("text",{x:x,y:labelY,"text-anchor":"middle",fill:css("--text"),"font-size":9,"font-weight":"600"});
+      t.textContent = fmt(f.depth,0)+"mm";
+      svg.appendChild(t);
+    });
+
+    if(state.measuredTime!==null && !isNaN(state.measuredTime)){
+      var d = depthFromTime(state.measuredTime);
+      if(d>=0 && d<=total){
+        var mx = entryX + dir*d*scaleX;
+        svg.appendChild(svgEl("line",{x1:mx,y1:cy-maxDrawH/2-6,x2:mx,y2:cy+maxDrawH/2+6,stroke:css("--accent"),"stroke-width":1.5,"stroke-dasharray":"5,3"}));
+        var lbl = svgEl("text",{x:mx,y:cy+maxDrawH/2+30,"text-anchor":"middle",fill:css("--accent"),"font-size":9,"font-weight":"700"});
+        lbl.textContent = "measured "+fmt(d,1)+"mm";
+        svg.appendChild(lbl);
+      }
+    }
+
+    $("diagramNote").textContent = "Not to scale — diameters are exaggerated for clarity. Probe enters at the "+(state.scan.entryEnd==="near"?"left (near)":"right (far)")+" end face. ⚠ marks a step whose diameter the beam has already spread past its own element radius when it arrives — sensitivity there may be reduced.";
+  }
+
+  function renderPlanRadialDiagram(){
+    $("diagTitle").textContent = "Radial beam path (OD scan)";
+    var svg = $("diagram");
+    svg.innerHTML = "";
+    var r = radialData();
+    if(!r.section || !r.section.od){
+      svg.setAttribute("viewBox","0 0 600 260");
+      $("diagramNote").textContent = "";
+      return;
+    }
+    var W=600,H=260;
+    svg.setAttribute("viewBox","0 0 "+W+" "+H);
+    var cx=W/2, cy=H/2+10;
+    var maxR = 95;
+    var scale = maxR/(r.section.od/2);
+    var odR = r.section.od/2*scale;
+    svg.appendChild(svgEl("circle",{cx:cx,cy:cy,r:odR,fill:css("--steel"),stroke:css("--sub"),"stroke-width":1.5}));
+    if(r.hollow){
+      var idR = r.section.id/2*scale;
+      svg.appendChild(svgEl("circle",{cx:cx,cy:cy,r:idR,fill:css("--bore"),stroke:css("--sub"),"stroke-width":1,"stroke-dasharray":"3,2"}));
+    }
+    svg.appendChild(svgEl("rect",{x:cx-14,y:cy-odR-14,width:28,height:12,fill:css("--accent")}));
+    var beamEndY = cy - odR + (r.depth*scale);
+    svg.appendChild(svgEl("line",{x1:cx,y1:cy-odR,x2:cx,y2:beamEndY,stroke:css("--beam"),"stroke-width":2.5}));
+    svg.appendChild(svgEl("circle",{cx:cx,cy:beamEndY,r:4,fill:css("--beam")}));
+    var t = svgEl("text",{x:cx+10,y:beamEndY+4,fill:css("--text"),"font-size":10,"font-weight":"600"});
+    t.textContent = fmt(r.depth,1)+" mm";
+    svg.appendChild(t);
+
+    var N = nearField(), elemR = effectiveDiameter()/2, ang = spreadAngleRad();
+    var startY = cy-odR;
+    if(!isNaN(N) && !isNaN(ang)){
+      var nEndDepth = Math.min(N, r.depth);
+      var leftPath = "M "+(cx-elemR*scale)+" "+startY+" L "+(cx-elemR*scale)+" "+(startY+nEndDepth*scale);
+      var rightPath = "M "+(cx+elemR*scale)+" "+startY+" L "+(cx+elemR*scale)+" "+(startY+nEndDepth*scale);
+      if(N < r.depth){
+        var farR = beamRadiusAtDepth(r.depth)*scale;
+        leftPath += " L "+(cx-farR)+" "+(startY+r.depth*scale);
+        rightPath += " L "+(cx+farR)+" "+(startY+r.depth*scale);
+      }
+      svg.appendChild(svgEl("path",{d:leftPath, stroke:css("--spread"),"stroke-width":1,fill:"none","stroke-dasharray":"3,2"}));
+      svg.appendChild(svgEl("path",{d:rightPath, stroke:css("--spread"),"stroke-width":1,fill:"none","stroke-dasharray":"3,2"}));
+    }
+
+    var lbl2 = svgEl("text",{x:cx,y:cy+odR+22,"text-anchor":"middle",fill:css("--sub"),"font-size":10});
+    lbl2.textContent = "Section "+(r.index+1)+" — Ø"+fmt(r.section.od,0)+(r.hollow?" / IDØ"+fmt(r.section.id,0):" (solid)");
+    svg.appendChild(lbl2);
+
+    $("diagramNote").textContent = "Cross-section at Section "+(r.index+1)+". Probe scans around/along the OD; beam travels radially inward. "+(r.hollow ? "Depth shown is wall thickness to the bore (ID) surface." : "Depth shown is the full diameter to the far-side backwall.");
+  }
+
+  /* ---------- Live Scan ---------- */
+  function renderLive(){
+    var total = totalLength();
+    var slider = $("liveSlider");
+    slider.max = Math.max(1, Math.round(total));
+    if(state.scan.mode==="axial"){
+      if(state.live.axialDepth>total) state.live.axialDepth = total;
+      var sec = entrySection();
+      var maxR = sec ? sec.od/2 : 30;
+      $("liveOffsetSlider").min = -maxR;
+      $("liveOffsetSlider").max = maxR;
+      state.live.axialOffset = clampOffset(state.live.axialOffset);
+      $("liveOffsetSlider").value = state.live.axialOffset;
+      $("liveSliderLabel").textContent = "Pulse depth from probe";
+      slider.value = state.live.axialDepth;
+      renderLiveAxial();
+    } else {
+      if(state.live.radialPos>total) state.live.radialPos = total;
+      $("liveSliderLabel").textContent = "Probe position (from near end)";
+      slider.value = state.live.radialPos;
+      renderLiveRadial();
+    }
+  }
+  $("liveSlider").addEventListener("input", function(){
+    var v = parseFloat(this.value)||0;
+    if(state.scan.mode==="axial") state.live.axialDepth = v; else state.live.radialPos = v;
+    save();
+    if(state.scan.mode==="axial") renderLiveAxial(); else renderLiveRadial();
+  });
+  $("liveOffsetSlider").addEventListener("input", function(){
+    state.live.axialOffset = clampOffset(parseFloat(this.value)||0);
+    save();
+    renderLiveAxial();
+  });
+
+  function autoTolerance(){
+    var f = state.probe.frequency, V = velocityMmUs();
+    if(!f||!V) return 3;
+    return V/f; // ~1 wavelength
+  }
+
+  function renderLiveAxial(){
+    var svg = $("liveDiagram");
+    var geo = drawShaftProfileSVG(svg);
+    if(!geo){ $("liveReadout").innerHTML = ""; return; }
+    var padX=geo.padX, plotW=geo.plotW, scaleX=geo.scaleX, scaleY=geo.scaleY, cy=geo.cy, maxDrawH=geo.maxDrawH, total=geo.total;
+    if(state.live.axialDepth<0) state.live.axialDepth=0;
+    if(state.live.axialDepth>total) state.live.axialDepth=total;
+    state.live.axialOffset = clampOffset(state.live.axialOffset);
+    $("liveOffsetSlider").value = state.live.axialOffset;
+
+    var entryX = state.scan.entryEnd==="near" ? padX : padX+plotW;
+    var dir = state.scan.entryEnd==="near" ? 1 : -1;
+    var beamY = cy + state.live.axialOffset*scaleY;
+    var probeRect = svgEl("rect",{class:"probe-drag", x: dir===1? entryX-10:entryX, y:beamY-16, width:10, height:32, fill:css("--accent")});
+    svg.appendChild(probeRect);
+    makeProbeDraggable(svg, probeRect, geo);
+
+    var feats = axialFeatures();
+    feats.forEach(function(f){
+      var x = entryX + dir*f.depth*scaleX;
+      svg.appendChild(svgEl("circle",{cx:x,cy:beamY,r:3,fill:"none",stroke:css("--sub"),"stroke-width":1}));
+    });
+
+    var curX = entryX + dir*state.live.axialDepth*scaleX;
+    var clipDepth = offsetClipDepth(state.live.axialOffset);
+    var tol = autoTolerance();
+    var hit = null;
+    feats.forEach(function(f){ if(Math.abs(f.depth-state.live.axialDepth)<=tol) hit=f; });
+    if(clipDepth!=null && clipDepth < state.live.axialDepth){
+      var clipX = entryX + dir*clipDepth*scaleX;
+      svg.appendChild(svgEl("line",{x1:entryX,y1:beamY,x2:clipX,y2:beamY,stroke:css("--beam"),"stroke-width":2.5}));
+      svg.appendChild(svgEl("line",{x1:clipX,y1:beamY,x2:curX,y2:beamY,stroke:css("--accent2"),"stroke-width":2.5}));
+    } else {
+      svg.appendChild(svgEl("line",{x1:entryX,y1:beamY,x2:curX,y2:beamY,stroke:css("--beam"),"stroke-width":2.5}));
+    }
+    svg.appendChild(svgEl("line",{x1:curX,y1:cy-maxDrawH/2-8,x2:curX,y2:cy+maxDrawH/2+8,stroke:css("--accent"),"stroke-width":1.2,"stroke-dasharray":"4,2"}));
+    svg.appendChild(svgEl("circle",{cx:curX,cy:beamY,r:6,fill:css("--accent"),class: hit ? "cursor-hit" : ""}));
+
+    var html = '<div class="big">'+fmt(state.live.axialDepth,1)+' mm</div>'+
+      '<div style="font-size:12px;color:var(--sub);margin-bottom:6px;">elapsed '+fmt(timeFromDepth(state.live.axialDepth),2)+' &micro;s'+(state.live.axialOffset ? (' · '+fmt(Math.abs(state.live.axialOffset),1)+'mm off-centre') : '')+'</div>';
+    html += hit ? '<div class="flag-ok">At: '+hit.label+'</div>' : '<div style="color:var(--sub);">Clear path — no reflector here</div>';
+    if(clipDepth!=null && state.live.axialDepth > clipDepth){
+      html += '<div class="flag-warn">⚠ Beam edge likely clipping the OD beyond ~'+fmt(clipDepth,0)+' mm — signal reliability reduced here</div>';
+    }
+    $("liveReadout").innerHTML = html;
+  }
+
+  function renderLiveRadial(){
+    var svg = $("liveDiagram");
+    var geo = drawShaftProfileSVG(svg);
+    if(!geo){ $("liveReadout").innerHTML = ""; return; }
+    var padX=geo.padX, scaleX=geo.scaleX, scaleY=geo.scaleY, cy=geo.cy, total=geo.total;
+    if(state.live.radialPos<0) state.live.radialPos=0;
+    if(state.live.radialPos>total) state.live.radialPos=total;
+
+    var x = padX + state.live.radialPos*scaleX;
+    var idx = sectionAtX(Math.min(Math.max(state.live.radialPos,0.001), total-0.001));
+    var sec = state.sections[idx];
+    var hollow = Number(sec.id||0)>0 && Number(sec.id) < Number(sec.od);
+    var depth = hollow ? (sec.od-sec.id)/2 : sec.od;
+    var topY = cy - (sec.od*scaleY)/2;
+    var beamEndY = topY + depth*scaleY;
+
+    svg.appendChild(svgEl("rect",{x:x-9,y:topY-14,width:18,height:12,fill:css("--accent")}));
+    svg.appendChild(svgEl("line",{x1:x,y1:topY,x2:x,y2:beamEndY,stroke:css("--beam"),"stroke-width":2.5}));
+    svg.appendChild(svgEl("circle",{cx:x,cy:beamEndY,r:4,fill:css("--beam")}));
+
+    var html = '<div class="big">'+fmt(depth,1)+' mm</div>'+
+      '<div style="font-size:12px;color:var(--sub);margin-bottom:6px;">Section '+(idx+1)+' — Ø'+fmt(sec.od,0)+(hollow?(" / IDØ"+fmt(sec.id,0)):" (solid)")+' · '+fmt(timeFromDepth(depth),2)+' &micro;s</div>'+
+      '<div style="color:var(--sub);">'+fmt(state.live.radialPos,0)+' mm from near end</div>';
+    $("liveReadout").innerHTML = html;
+  }
+
+  function makeProbeDraggable(svg, rectEl, geo){
+    var padX = geo.padX, plotW = geo.plotW, cy = geo.cy, scaleY = geo.scaleY, maxDrawH = geo.maxDrawH;
+    var dragging = false;
+    function toSvgPoint(evt){
+      var pt = svg.createSVGPoint();
+      pt.x = evt.clientX; pt.y = evt.clientY;
+      var ctm = svg.getScreenCTM();
+      if(!ctm) return {x:padX, y:cy};
+      var p = pt.matrixTransform(ctm.inverse());
+      return {x:p.x, y:p.y};
+    }
+    rectEl.addEventListener("pointerdown", function(evt){
+      dragging = true;
+      try{ rectEl.setPointerCapture(evt.pointerId); }catch(e){}
+      evt.preventDefault();
+    });
+    rectEl.addEventListener("pointermove", function(evt){
+      if(!dragging) return;
+      var p = toSvgPoint(evt);
+      var x = Math.max(padX, Math.min(padX+plotW, p.x));
+      var y = Math.max(cy-maxDrawH/2-10, Math.min(cy+maxDrawH/2+10, p.y));
+      rectEl.setAttribute("x", x-5);
+      rectEl.setAttribute("y", y-16);
+    });
+    function finish(evt){
+      if(!dragging) return;
+      dragging = false;
+      var p = toSvgPoint(evt);
+      var x = Math.max(padX, Math.min(padX+plotW, p.x));
+      var newEnd = x < (padX+plotW/2) ? "near" : "far";
+      var changed = newEnd !== state.scan.entryEnd;
+      state.scan.entryEnd = newEnd;
+      if(changed) state.live.axialDepth = 0;
+      state.live.axialOffset = clampOffset((p.y - cy)/scaleY);
+      refreshScanConfigUI(); save();
+      renderLiveAxial();
+    }
+    rectEl.addEventListener("pointerup", finish);
+    rectEl.addEventListener("pointercancel", finish);
+  }
+
+  /* ---------- Analysis mode ---------- */
+  var indState = { type:"axial", fromEnd:"near" };
+
+  document.querySelectorAll(".seg-indtype").forEach(function(b){
+    b.addEventListener("click", function(){
+      indState.type = b.dataset.val;
+      document.querySelectorAll(".seg-indtype").forEach(function(x){ x.classList.toggle("active", x===b); });
+      $("indAxialFields").style.display = indState.type==="axial" ? "block":"none";
+      $("indRadialFields").style.display = indState.type==="radial" ? "block":"none";
+    });
+  });
+  document.querySelectorAll(".seg-indend").forEach(function(b){
+    b.addEventListener("click", function(){
+      indState.fromEnd = b.dataset.val;
+      document.querySelectorAll(".seg-indend").forEach(function(x){ x.classList.toggle("active", x===b); });
+    });
+  });
+  $("indTimeAxial").addEventListener("input", function(){
+    var v = parseFloat(this.value);
+    if(!isNaN(v)) $("indDepthAxial").value = fmt(depthFromTime(v),2);
+  });
+  $("indTimeRadial").addEventListener("input", function(){
+    var v = parseFloat(this.value);
+    if(!isNaN(v)) $("indDepthRadial").value = fmt(depthFromTime(v),2);
+  });
+
+  $("addIndicationBtn").addEventListener("click", function(){
+    var total = totalLength();
+    var ind = {
+      id: uid(),
+      label: $("indLabel").value.trim(),
+      scanType: indState.type,
+      amplitude: $("indAmplitude").value===""? null : parseFloat($("indAmplitude").value),
+      notes: $("indNotes").value.trim()
+    };
+    if(indState.type==="axial"){
+      var depth = parseFloat($("indDepthAxial").value);
+      if(isNaN(depth)){ alert("Enter a depth (or an instrument reading) before adding this indication."); return; }
+      ind.x = indState.fromEnd==="near" ? depth : total-depth;
+      ind.x = Math.max(0, Math.min(total, ind.x));
+      ind.measuredTime = $("indTimeAxial").value===""? null : parseFloat($("indTimeAxial").value);
+      ind.fromEnd = indState.fromEnd;
+      ind.radialDepth = null;
+      ind.clockPos = "";
+    } else {
+      var axPos = parseFloat($("indAxialPos").value);
+      var rDepth = parseFloat($("indDepthRadial").value);
+      if(isNaN(axPos) || isNaN(rDepth)){ alert("Enter an axial position and a depth from OD before adding this indication."); return; }
+      ind.x = Math.max(0, Math.min(total, axPos));
+      ind.radialDepth = rDepth;
+      ind.measuredTime = $("indTimeRadial").value===""? null : parseFloat($("indTimeRadial").value);
+      ind.clockPos = $("indClock").value.trim();
+    }
+    state.indications.push(ind);
+    save();
+    ["indLabel","indTimeAxial","indDepthAxial","indAxialPos","indTimeRadial","indDepthRadial","indClock","indAmplitude","indNotes"].forEach(function(id){ $(id).value=""; });
+    renderAnalysis();
+  });
+
+  function clampIndX(x, total){ return Math.max(0, Math.min(total, x)); }
+
+  function renderIndicationsList(){
+    var wrap = $("indicationsList");
+    wrap.innerHTML = "";
+    if(state.indications.length===0){ wrap.innerHTML = '<div class="empty">No indications recorded yet.</div>'; return; }
+    var total = totalLength();
+    state.indications.forEach(function(ind, i){
+      var div = document.createElement("div");
+      div.className = "section-item";
+      var x = clampIndX(ind.x, total);
+      var offShaft = x !== ind.x;
+      var desc;
+      if(ind.scanType==="axial"){
+        desc = fmt(x,1)+" mm from near end ("+fmt(total-x,1)+" mm from far end)"+(ind.measuredTime!=null?" · "+fmt(ind.measuredTime,2)+" µs":"");
+      } else {
+        desc = "at "+fmt(x,1)+" mm from near end · "+fmt(ind.radialDepth,1)+" mm from OD"+(ind.clockPos?(" · "+ind.clockPos):"")+(ind.measuredTime!=null?" · "+fmt(ind.measuredTime,2)+" µs":"");
+      }
+      if(offShaft) desc += ' <span class="flag-warn">— outside current shaft length, check after editing sections</span>';
+      div.innerHTML =
+        '<div class="top"><strong>IND-'+(i+1)+(ind.label?" — "+ind.label:"")+' ('+(ind.scanType==="axial"?"Axial":"Radial")+')</strong><button class="rm" data-i="'+i+'">Remove</button></div>'+
+        '<div class="field"><span>'+desc+'</span></div>'+
+        (ind.amplitude!=null ? '<div class="field"><span>Amplitude: '+fmt(ind.amplitude,0)+'%</span></div>' : '')+
+        (ind.notes ? '<div class="field"><span>'+ind.notes+'</span></div>' : '');
+      wrap.appendChild(div);
+    });
+    wrap.querySelectorAll(".rm").forEach(function(btn){
+      btn.addEventListener("click", function(){
+        state.indications.splice(+this.dataset.i,1); save(); renderAnalysis();
+      });
+    });
+  }
+
+  function drawIndicationMarkers(svg, geo){
+    var padX=geo.padX, scaleX=geo.scaleX, scaleY=geo.scaleY, cy=geo.cy, maxDrawH=geo.maxDrawH, total=geo.total;
+    state.indications.forEach(function(ind, i){
+      var clampedX = clampIndX(ind.x, total);
+      var x = padX + clampedX*scaleX;
+      if(ind.scanType==="axial"){
+        svg.appendChild(svgEl("circle",{cx:x,cy:cy,r:5,fill:"none",stroke:css("--ind"),"stroke-width":2}));
+        svg.appendChild(svgEl("line",{x1:x,y1:cy-maxDrawH/2-6,x2:x,y2:cy+maxDrawH/2+6,stroke:css("--ind"),"stroke-width":1,"stroke-dasharray":"2,2"}));
+        var t = svgEl("text",{x:x,y:cy-maxDrawH/2-10,"text-anchor":"middle",fill:css("--ind"),"font-size":9,"font-weight":"700"});
+        t.textContent = (i+1);
+        svg.appendChild(t);
+      } else {
+        var idx = sectionAtX(Math.min(Math.max(clampedX,0.001), total-0.001));
+        var sec = state.sections[idx];
+        if(!sec) return;
+        var topY = cy - (sec.od*scaleY)/2;
+        var depthUsed = Math.max(0, Math.min(ind.radialDepth||0, sec.od));
+        var endY = topY + depthUsed*scaleY;
+        svg.appendChild(svgEl("line",{x1:x,y1:topY,x2:x,y2:endY,stroke:css("--ind"),"stroke-width":2.5}));
+        svg.appendChild(svgEl("circle",{cx:x,cy:endY,r:4,fill:css("--ind")}));
+        var t2 = svgEl("text",{x:x,y:topY-6,"text-anchor":"middle",fill:css("--ind"),"font-size":9,"font-weight":"700"});
+        t2.textContent = (i+1);
+        svg.appendChild(t2);
+      }
+    });
+  }
+
+  function renderAnalysis(){
+    renderIndicationsList();
+    var svg = $("analysisDiagram");
+    var geo = drawShaftProfileSVG(svg);
+    if(geo) drawIndicationMarkers(svg, geo);
+  }
+
+  function table(headers, rows){
+    var t = "<table><thead><tr>"+headers.map(function(h){return "<th>"+h+"</th>";}).join("")+"</tr></thead><tbody>";
+    rows.forEach(function(r){ t += "<tr>"+r.map(function(c){return "<td>"+c+"</td>";}).join("")+"</tr>"; });
+    t += "</tbody></table>";
+    return t;
+  }
+
+  function buildReportHTML(){
+    var N = nearField(), ang = spreadAngleRad();
+    var probeRows = [
+      ["Name", state.probe.name || "—"],
+      ["Shape", state.probe.shape==="circular" ? "Circular" : "Rectangular"],
+      state.probe.shape==="circular"
+        ? ["Element diameter", fmt(state.probe.diameter,1)+" mm"]
+        : ["Element size (L × W)", fmt(state.probe.width,1)+" × "+fmt(state.probe.height,1)+" mm"],
+      ["Frequency", fmt(state.probe.frequency,2)+" MHz"],
+      ["Probe zero / delay", fmt(state.probe.delay,2)+" µs"],
+      ["Near field (N)", isNaN(N)?"—":fmt(N,1)+" mm"],
+      ["Beam spread half-angle", isNaN(ang)?"—":"±"+fmt(ang*180/Math.PI,1)+"°"],
+      ["Material velocity", fmt(state.velocity,0)+" m/s"]
+    ];
+
+    var total = totalLength();
+    var starts = sectionStarts();
+    var sectionRows = state.sections.map(function(s,i){
+      return ["Section "+(i+1), fmt(s.od,0)+" mm", fmt(s.len,0)+" mm", Number(s.id||0)>0 ? fmt(s.id,0)+" mm" : "Solid", fmt(starts[i],0)+"–"+fmt(starts[i]+Number(s.len||0),0)+" mm"];
+    });
+
+    var scanRows = [
+      ["Scan direction", state.scan.mode==="axial" ? "Axial (end-face)" : "Radial (OD)"],
+      ["Probe entry end", state.scan.mode==="axial" ? (state.scan.entryEnd==="near"?"Near end":"Far end") : "—"],
+      ["Total shaft length", fmt(total,0)+" mm"]
+    ];
+
+    var indRows = state.indications.map(function(ind, i){
+      var x = clampIndX(ind.x, total);
+      var offShaft = x !== ind.x;
+      var posStr, depthStr;
+      if(ind.scanType==="axial"){
+        posStr = fmt(x,1)+" mm from near end ("+fmt(total-x,1)+" mm from far end)"+(offShaft?" [outside current shaft length]":"");
+        depthStr = "—";
+      } else {
+        posStr = fmt(x,1)+" mm from near end"+(offShaft?" [outside current shaft length]":"");
+        depthStr = fmt(ind.radialDepth,1)+" mm from OD";
+      }
+      return [
+        "IND-"+(i+1)+(ind.label?" ("+ind.label+")":""),
+        ind.scanType==="axial" ? "Axial" : "Radial",
+        posStr,
+        depthStr,
+        ind.measuredTime!=null ? fmt(ind.measuredTime,2)+" µs" : "—",
+        ind.amplitude!=null ? fmt(ind.amplitude,0)+"%" : "—",
+        ind.clockPos || "—",
+        ind.notes || ""
+      ];
+    });
+
+    var html = "";
+    html += "<h1>Ultrasonic Shaft Inspection Report</h1>";
+    html += "<div class='meta'>Generated "+new Date().toLocaleString()+"</div>";
+    html += "<h2>Probe</h2>"+table(["Parameter","Value"], probeRows);
+    html += "<h2>Shaft Geometry</h2>"+table(["Section","OD","Length","ID","Position from near end"], sectionRows);
+    html += "<h2>Scan Configuration</h2>"+table(["Parameter","Value"], scanRows);
+    html += "<h2>Beam Path Diagram</h2><div id='reportDiagramHolder'></div>";
+    html += "<h2>Indications ("+state.indications.length+")</h2>";
+    html += state.indications.length ? table(["ID","Type","Position","Radial depth","Time","Amplitude","Clock","Notes"], indRows) : "<p>No indications recorded.</p>";
+    html += "<div class='footer'>Report generated by Shaft UT Planner. Depths are calculated from the entered probe delay and material velocity — verify critical readings against calibrated equipment and applicable procedures.</div>";
+    return html;
+  }
+
+  function generateReport(){
+    var container = $("printReport");
+    container.innerHTML = buildReportHTML();
+    var holder = container.querySelector("#reportDiagramHolder");
+    var svg = document.createElementNS("http://www.w3.org/2000/svg","svg");
+    svg.setAttribute("class","diagram");
+    svg.setAttribute("viewBox","0 0 600 260");
+    holder.appendChild(svg);
+    // Colors are baked into the SVG's attributes from the current theme at draw
+    // time (see css()), so force the light palette for this synchronous build —
+    // otherwise a dark-mode device bakes near-white labels onto a white page.
+    document.documentElement.classList.add("pdf-light-force");
+    var geo = drawShaftProfileSVG(svg);
+    if(geo) drawIndicationMarkers(svg, geo);
+    document.documentElement.classList.remove("pdf-light-force");
+    window.print();
+  }
+  $("generateReportBtn").addEventListener("click", generateReport);
+
+  /* ---------- Backup & restore ---------- */
+  $("exportDataBtn").addEventListener("click", function(){
+    var data = JSON.stringify(state);
+    var box = $("backupText");
+    box.value = data;
+    box.focus();
+    box.select();
+    var copied = false;
+    try{ document.execCommand("copy"); copied = true; }catch(e){}
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(data).then(function(){
+        $("backupStatus").innerHTML = '<span class="flag-ok">Copied to clipboard — paste it somewhere safe.</span>';
+      }).catch(function(){
+        $("backupStatus").innerHTML = copied
+          ? '<span class="flag-ok">Copied to clipboard — paste it somewhere safe.</span>'
+          : 'Select the text above and copy it manually.';
+      });
+    } else {
+      $("backupStatus").innerHTML = copied
+        ? '<span class="flag-ok">Copied to clipboard — paste it somewhere safe.</span>'
+        : 'Select the text above and copy it manually.';
+    }
+  });
+  $("importDataBtn").addEventListener("click", function(){
+    var txt = $("backupText").value.trim();
+    if(!txt){ $("backupStatus").innerHTML = '<span class="flag-warn">Paste a backup into the box first.</span>'; return; }
+    var parsed;
+    try{ parsed = JSON.parse(txt); }catch(e){
+      $("backupStatus").innerHTML = '<span class="flag-flaw">That text isn\'t valid backup data — nothing was changed.</span>';
+      return;
+    }
+    if(!parsed || typeof parsed!=="object" || !Array.isArray(parsed.sections)){
+      $("backupStatus").innerHTML = '<span class="flag-flaw">That doesn\'t look like a Shaft UT Planner backup — nothing was changed.</span>';
+      return;
+    }
+    mergeLoadedState(parsed);
+    save();
+    bindProbeForm();
+    renderSections();
+    renderRadialSelect();
+    renderProbePresets();
+    renderShaftPresets();
+    refreshScanConfigUI();
+    renderAnalysis();
+    $("backupStatus").innerHTML = '<span class="flag-ok">Backup restored.</span>';
+  });
+
+  /* ---------- Lookup (Scan Plan) ---------- */
+  $("measuredTime").addEventListener("input", function(){
+    var v = parseFloat(this.value);
+    state.measuredTime = isNaN(v) ? null : v;
+    save(); renderPlan();
+  });
+  $("tolerance").addEventListener("input", function(){
+    var v = parseFloat(this.value);
+    state.tolerance = isNaN(v) ? null : v;
+    save(); evalLookup();
+  });
+
+  function evalLookup(){
+    var box = $("lookupResult");
+    if(state.measuredTime===null || isNaN(state.measuredTime)){
+      box.style.display="none";
+      return;
+    }
+    box.style.display="block";
+    var depth = depthFromTime(state.measuredTime);
+    var tol = state.tolerance!==null ? state.tolerance : autoTolerance();
+    var html = '<div class="big">'+fmt(depth,1)+' mm</div><div style="color:var(--sub); font-size:12px; margin-bottom:8px;">indicated depth from probe (delay-corrected)</div>';
+
+    if(depth<0){
+      html += '<div class="flag-warn">Time is less than the probe delay — check probe zero setting.</div>';
+    } else if(state.scan.mode==="axial"){
+      var total = totalLength();
+      if(depth>total){
+        html += '<div class="flag-warn">Beyond the far end of the shaft (length '+fmt(total,0)+' mm) — likely a multiple/reverberation echo, not a real reflector at this depth.</div>';
+      } else {
+        var feats = axialFeatures();
+        var best=null, bestDelta=Infinity;
+        feats.forEach(function(f){
+          var delta = Math.abs(f.depth-depth);
+          if(delta<bestDelta){ bestDelta=delta; best=f; }
+        });
+        if(best && bestDelta<=tol){
+          html += '<div class="flag-ok">Matches: '+best.label+'</div><div style="font-size:12px; color:var(--sub)">'+fmt(bestDelta,2)+' mm from expected '+fmt(best.depth,1)+' mm — consistent with known geometry.</div>';
+        } else {
+          html += '<div class="flag-flaw">No known geometric feature within ±'+fmt(tol,1)+' mm</div><div style="font-size:12px; color:var(--sub)">Nearest feature: '+(best?best.label+" at "+fmt(best.depth,1)+" mm":"none")+'. This may indicate a real reflector (inclusion, crack, porosity) rather than shaft geometry.</div>';
+        }
+      }
+    } else {
+      var r = radialData();
+      var delta = Math.abs(r.depth-depth);
+      if(delta<=tol){
+        html += '<div class="flag-ok">Matches expected '+(r.hollow?"ID wall":"backwall")+' at '+fmt(r.depth,1)+' mm ('+fmt(delta,2)+' mm off)</div>';
+      } else if(!r.hollow && Math.abs(depth % r.depth) <= tol){
+        html += '<div class="flag-warn">Consistent with a multiple backwall echo, not a discrete flaw.</div>';
+      } else {
+        html += '<div class="flag-flaw">Does not match the expected '+fmt(r.depth,1)+' mm reflection — possible internal flaw at this radial depth.</div>';
+      }
+    }
+    box.innerHTML = html;
+  }
+
+  /* ---------- Init ---------- */
+  bindProbeForm();
+  renderSections();
+  renderRadialSelect();
+  renderProbePresets();
+  renderShaftPresets();
+  refreshScanConfigUI();
+  showView("probe");
+})();
+</script>
+<script>
+  if("serviceWorker" in navigator){
+    window.addEventListener("load", function(){
+      navigator.serviceWorker.register("sw.js").catch(function(){});
+    });
+  }
+</script>
+</body>
+</html>
