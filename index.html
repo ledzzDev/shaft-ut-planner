@@ -238,6 +238,7 @@
         <span><i class="swatch" style="background:var(--beam)"></i>Beam / reflection</span>
         <span><i class="swatch" style="background:var(--spread)"></i>Beam spread edge</span>
         <span><i class="swatch" style="background:var(--accent)"></i>Indicated echo (manual entry)</span>
+        <span><i class="swatch" style="border:1.5px dashed var(--sub); background:transparent; height:0;"></i>Step, no echo expected</span>
       </div>
       <div class="note" id="diagramNote"></div>
     </div>
@@ -529,18 +530,29 @@
     var feats = [];
     var starts = sectionStarts();
     var total = totalLength();
+    var forward = state.scan.entryEnd==="near"; // true: beam travels from low x to high x
     for(var i=1;i<state.sections.length;i++){
-      var prev = state.sections[i-1], cur = state.sections[i];
+      var prev = state.sections[i-1], cur = state.sections[i]; // prev = nearer physical near end, cur = nearer physical far end
       if(Number(prev.od)!==Number(cur.od) || Number(prev.id||0)!==Number(cur.id||0)){
         var x = starts[i];
         var depth = depthFromX(x);
+        var upstream = forward ? prev : cur;   // section the beam is travelling out of at this boundary
+        var downstream = forward ? cur : prev; // section the beam is travelling into
+        // A square shoulder only reflects the beam straight back to the probe if there is
+        // less solid material just downstream than upstream — i.e. the OD steps down, and/or
+        // a bore opens up, in the beam's direction of travel. A step the other way (OD growing,
+        // or a bore closing up) presents no face in the beam's path at all: the shaft is simply
+        // solid all the way through there, so an echo at that depth means a real reflector, not geometry.
+        var reflects = Number(downstream.od) < Number(upstream.od) || Number(downstream.id||0) > Number(upstream.id||0);
         feats.push({
           label: "Step Ø"+fmt(prev.od,0)+"→Ø"+fmt(cur.od,0),
-          x:x, depth:depth, time:timeFromDepth(depth)
+          x:x, depth:depth, time:timeFromDepth(depth),
+          reflects: reflects
         });
       }
     }
-    feats.push({ label:"Far end face", x: total, depth: depthFromX(total), time: timeFromDepth(depthFromX(total)) });
+    var farX = state.scan.entryEnd==="near" ? total : 0; // physical end opposite the probe
+    feats.push({ label:"Far end face", x: farX, depth: depthFromX(farX), time: timeFromDepth(depthFromX(farX)), reflects:true });
     feats.sort(function(a,b){ return a.depth-b.depth; });
     feats.forEach(function(f){
       var localSectionIdx = sectionAtX(Math.min(Math.max(f.x, 0.001), total-0.001));
@@ -963,7 +975,9 @@
     if(state.scan.mode==="axial"){
       axialFeatures().forEach(function(f){
         var tr = document.createElement("tr");
-        tr.innerHTML = "<td>"+f.label+(f.warn?' <span class="flag-warn">&#9888;</span>':'')+"</td><td>"+fmt(f.depth,1)+" mm</td><td>"+fmt(f.time,2)+" &micro;s</td><td></td>";
+        var note = f.reflects ? "" : ' <span class="hint" style="display:block; font-style:italic;">no echo expected — diameter increases here</span>';
+        tr.innerHTML = "<td>"+f.label+(f.warn?' <span class="flag-warn">&#9888;</span>':'')+note+"</td><td>"+fmt(f.depth,1)+" mm</td><td>"+fmt(f.time,2)+" &micro;s</td><td></td>";
+        if(!f.reflects) tr.style.opacity = "0.65";
         tbody.appendChild(tr);
       });
     } else {
@@ -1018,10 +1032,14 @@
     var feats = axialFeatures();
     feats.forEach(function(f,idx){
       var x = entryX + dir*f.depth*scaleX;
-      svg.appendChild(svgEl("circle",{cx:x,cy:cy,r:4,fill: f.warn?css("--accent2"):css("--beam")}));
+      if(f.reflects){
+        svg.appendChild(svgEl("circle",{cx:x,cy:cy,r:4,fill: f.warn?css("--accent2"):css("--beam")}));
+      } else {
+        svg.appendChild(svgEl("circle",{cx:x,cy:cy,r:4,fill:"none",stroke:css("--sub"),"stroke-width":1.2,"stroke-dasharray":"1.5,1.5"}));
+      }
       var labelY = cy - maxDrawH/2 - 10 - (idx%2)*14;
       svg.appendChild(svgEl("line",{x1:x,y1:cy,x2:x,y2:labelY+4,stroke:css("--sub"),"stroke-width":0.5}));
-      var t = svgEl("text",{x:x,y:labelY,"text-anchor":"middle",fill:css("--text"),"font-size":9,"font-weight":"600"});
+      var t = svgEl("text",{x:x,y:labelY,"text-anchor":"middle",fill: f.reflects?css("--text"):css("--sub"),"font-size":9,"font-weight": f.reflects?"600":"400"});
       t.textContent = fmt(f.depth,0)+"mm";
       svg.appendChild(t);
     });
@@ -1037,7 +1055,7 @@
       }
     }
 
-    $("diagramNote").textContent = "Not to scale — diameters are exaggerated for clarity. Probe enters at the "+(state.scan.entryEnd==="near"?"left (near)":"right (far)")+" end face. ⚠ marks a step whose diameter the beam has already spread past its own element radius when it arrives — sensitivity there may be reduced.";
+    $("diagramNote").textContent = "Not to scale — diameters are exaggerated for clarity. Probe enters at the "+(state.scan.entryEnd==="near"?"left (near)":"right (far)")+" end face. ⚠ marks a step whose diameter the beam has already spread past its own element radius when it arrives — sensitivity there may be reduced. Hollow markers show a step where the diameter increases in the beam's direction of travel — no direct echo is expected there, so a response at that depth is more likely a real reflector than geometry.";
   }
 
   function renderPlanRadialDiagram(){
@@ -1152,7 +1170,9 @@
     var feats = axialFeatures();
     feats.forEach(function(f){
       var x = entryX + dir*f.depth*scaleX;
-      svg.appendChild(svgEl("circle",{cx:x,cy:beamY,r:3,fill:"none",stroke:css("--sub"),"stroke-width":1}));
+      var attrs = {cx:x,cy:beamY,r:3,fill:"none",stroke:css("--sub"),"stroke-width":1};
+      if(!f.reflects) attrs["stroke-dasharray"] = "1.5,1.5";
+      svg.appendChild(svgEl("circle",attrs));
     });
 
     var curX = entryX + dir*state.live.axialDepth*scaleX;
@@ -1172,7 +1192,13 @@
 
     var html = '<div class="big">'+fmt(state.live.axialDepth,1)+' mm</div>'+
       '<div style="font-size:12px;color:var(--sub);margin-bottom:6px;">elapsed '+fmt(timeFromDepth(state.live.axialDepth),2)+' &micro;s'+(state.live.axialOffset ? (' · '+fmt(Math.abs(state.live.axialOffset),1)+'mm off-centre') : '')+'</div>';
-    html += hit ? '<div class="flag-ok">At: '+hit.label+'</div>' : '<div style="color:var(--sub);">Clear path — no reflector here</div>';
+    if(hit){
+      html += hit.reflects
+        ? '<div class="flag-ok">At: '+hit.label+'</div>'
+        : '<div class="flag-warn">At: '+hit.label+' &mdash; no echo expected here (diameter increases downstream); a response would suggest a flaw</div>';
+    } else {
+      html += '<div style="color:var(--sub);">Clear path — no reflector here</div>';
+    }
     if(clipDepth!=null && state.live.axialDepth > clipDepth){
       html += '<div class="flag-warn">⚠ Beam edge likely clipping the OD beyond ~'+fmt(clipDepth,0)+' mm — signal reliability reduced here</div>';
     }
@@ -1556,15 +1582,25 @@
         html += '<div class="flag-warn">Beyond the far end of the shaft (length '+fmt(total,0)+' mm) — likely a multiple/reverberation echo, not a real reflector at this depth.</div>';
       } else {
         var feats = axialFeatures();
+        var reflecting = feats.filter(function(f){ return f.reflects; });
         var best=null, bestDelta=Infinity;
-        feats.forEach(function(f){
+        reflecting.forEach(function(f){
           var delta = Math.abs(f.depth-depth);
           if(delta<bestDelta){ bestDelta=delta; best=f; }
         });
         if(best && bestDelta<=tol){
           html += '<div class="flag-ok">Matches: '+best.label+'</div><div style="font-size:12px; color:var(--sub)">'+fmt(bestDelta,2)+' mm from expected '+fmt(best.depth,1)+' mm — consistent with known geometry.</div>';
         } else {
-          html += '<div class="flag-flaw">No known geometric feature within ±'+fmt(tol,1)+' mm</div><div style="font-size:12px; color:var(--sub)">Nearest feature: '+(best?best.label+" at "+fmt(best.depth,1)+" mm":"none")+'. This may indicate a real reflector (inclusion, crack, porosity) rather than shaft geometry.</div>';
+          var nonReflecting = null, nrDelta=Infinity;
+          feats.forEach(function(f){
+            if(f.reflects) return;
+            var d2 = Math.abs(f.depth-depth);
+            if(d2<nrDelta){ nrDelta=d2; nonReflecting=f; }
+          });
+          var extra = (nonReflecting && nrDelta<=tol)
+            ? ' This coincides with '+nonReflecting.label+', a step where the diameter increases in the beam’s direction of travel — geometry alone would not produce an echo there, so this is likely a real reflector.'
+            : ' Nearest expected feature: '+(best?best.label+" at "+fmt(best.depth,1)+" mm":"none")+'.';
+          html += '<div class="flag-flaw">No known geometric feature within ±'+fmt(tol,1)+' mm</div><div style="font-size:12px; color:var(--sub)">This may indicate a real reflector (inclusion, crack, porosity) rather than shaft geometry.'+extra+'</div>';
         }
       }
     } else {
