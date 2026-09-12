@@ -47,11 +47,11 @@
   .row:last-child{border-bottom:none;}
   .row label{font-size:15px; flex:1;}
   .row .hint{display:block; font-size:11px; color:var(--sub); font-weight:400;}
-  input[type=number], input[type=text], select{
+  input[type=number], input[type=text], input[type=date], select{
     font-size:15px; padding:7px 10px; border-radius:9px; border:1px solid var(--border);
     background:var(--bg); color:var(--text); width:110px; text-align:right;
   }
-  input[type=text]{width:170px; text-align:left;}
+  input[type=text], input[type=date]{width:170px; text-align:left;}
   input[type=range]{ width:100%; accent-color:var(--accent); height:32px; }
   textarea{ font-size:14px; padding:8px 10px; border-radius:9px; border:1px solid var(--border); background:var(--bg); color:var(--text); width:100%; resize:vertical; font-family:inherit; margin-top:6px; }
   select{width:auto; text-align:left; -webkit-appearance:none; appearance:none; padding-right:26px;
@@ -291,6 +291,31 @@
   <!-- ANALYSIS VIEW -->
   <section class="view" id="view-analysis">
     <div class="card">
+      <h2>Job details</h2>
+      <div class="row"><label>Job / work order #</label><input type="text" id="jobNumber" placeholder="e.g. WO-4471"></div>
+      <div class="row"><label>Component ID</label><input type="text" id="jobComponentId" placeholder="e.g. Shaft SN-1029"></div>
+      <div class="row"><label>Client / site</label><input type="text" id="jobClient" placeholder="optional"></div>
+      <div class="row"><label>Inspection date</label><input type="date" id="jobDate"></div>
+      <div class="row"><label>Inspector</label><input type="text" id="jobInspector" placeholder="name"></div>
+      <div class="row"><label>Certification level</label><input type="text" id="jobCertLevel" placeholder="e.g. ASNT Level II"></div>
+      <div class="row"><label>Instrument</label><input type="text" id="jobInstrument" placeholder="make / model"></div>
+      <div class="row"><label>Instrument serial #</label><input type="text" id="jobInstrumentSerial" placeholder="optional"></div>
+      <div class="row"><label>Instrument cal. due</label><input type="date" id="jobCalDue"></div>
+      <div class="row"><label>Standard / procedure</label><input type="text" id="jobStandard" placeholder="e.g. ASTM A388 / PROC-014"></div>
+      <div class="row"><label>Acceptance criteria</label><input type="text" id="jobAcceptance" placeholder="e.g. no indication &gt; 5mm"></div>
+      <div class="row slider-row"><label>Notes</label><textarea id="jobNotes" rows="2" placeholder="optional"></textarea></div>
+    </div>
+
+    <div class="card">
+      <h2>Saved inspections</h2>
+      <div class="note">A saved inspection captures the probe, shaft geometry, job details and every indication together, so you can keep multiple shafts straight and come back to any of them later.</div>
+      <div class="row"><label>Name</label><input type="text" id="jobSaveName" placeholder="e.g. WO-4471 shaft"></div>
+      <button class="add-btn" id="saveJobBtn">+ Save current inspection as job</button>
+      <div id="jobsList" style="margin-top:10px;"></div>
+      <button class="add-btn" id="newInspectionBtn" style="margin-top:10px; border-color:var(--danger); color:var(--danger);">+ Start new inspection (clears current probe, shaft &amp; indications)</button>
+    </div>
+
+    <div class="card">
       <h2>Add indication</h2>
       <div class="row"><label>Type</label>
         <div class="seg" style="width:150px;">
@@ -385,17 +410,27 @@
   "use strict";
 
   /* ---------- State ---------- */
+  function defaultProbe(){ return { name:"Probe 1", shape:"circular", diameter:10, width:10, height:10, frequency:5, delay:0 }; }
+  function defaultScan(){ return { mode:"axial", entryEnd:"near", radialIndex:0 }; }
+  function defaultSections(){ return [ {od:60, len:300, id:0}, {od:40, len:200, id:0} ]; }
+  function defaultJob(){
+    return { jobNumber:"", componentId:"", client:"", inspectionDate:"", inspector:"", certLevel:"",
+      instrument:"", instrumentSerial:"", calDueDate:"", standard:"", acceptanceCriteria:"", notes:"" };
+  }
+
   var state = {
-    probe:{ name:"Probe 1", shape:"circular", diameter:10, width:10, height:10, frequency:5, delay:0 },
+    probe: defaultProbe(),
     velocity: 5920, // m/s
-    scan:{ mode:"axial", entryEnd:"near", radialIndex:0 },
-    sections:[ {od:60, len:300, id:0}, {od:40, len:200, id:0} ],
+    scan: defaultScan(),
+    sections: defaultSections(),
     measuredTime:null,
     tolerance:null,
     live:{ axialDepth:0, radialPos:0, axialOffset:0 },
     probePresets:[],
     shaftPresets:[],
-    indications:[]
+    indications:[],
+    job: defaultJob(),
+    jobs:[] // saved full-inspection snapshots: {id, name, savedAt, data:{probe,velocity,scan,sections,indications,job}}
   };
 
   function mergeLoadedState(parsed){
@@ -771,6 +806,99 @@
     state.shaftPresets.push({ id:uid(), name:name, sections:deepCopy(state.sections) });
     nameInput.value = "";
     save(); renderShaftPresets();
+  });
+
+  /* ---------- Job details ---------- */
+  function bindJobForm(){
+    $("jobNumber").value = state.job.jobNumber||"";
+    $("jobComponentId").value = state.job.componentId||"";
+    $("jobClient").value = state.job.client||"";
+    $("jobDate").value = state.job.inspectionDate||"";
+    $("jobInspector").value = state.job.inspector||"";
+    $("jobCertLevel").value = state.job.certLevel||"";
+    $("jobInstrument").value = state.job.instrument||"";
+    $("jobInstrumentSerial").value = state.job.instrumentSerial||"";
+    $("jobCalDue").value = state.job.calDueDate||"";
+    $("jobStandard").value = state.job.standard||"";
+    $("jobAcceptance").value = state.job.acceptanceCriteria||"";
+    $("jobNotes").value = state.job.notes||"";
+  }
+  [
+    ["jobNumber","jobNumber"], ["jobComponentId","componentId"], ["jobClient","client"],
+    ["jobDate","inspectionDate"], ["jobInspector","inspector"], ["jobCertLevel","certLevel"],
+    ["jobInstrument","instrument"], ["jobInstrumentSerial","instrumentSerial"], ["jobCalDue","calDueDate"],
+    ["jobStandard","standard"], ["jobAcceptance","acceptanceCriteria"], ["jobNotes","notes"]
+  ].forEach(function(pair){
+    $(pair[0]).addEventListener("input", function(){ state.job[pair[1]] = this.value; save(); });
+  });
+
+  /* ---------- Saved inspections (jobs) ---------- */
+  function renderJobsList(){
+    var wrap = $("jobsList");
+    wrap.innerHTML = "";
+    if(state.jobs.length===0){ wrap.innerHTML = '<div class="empty">No saved inspections yet.</div>'; return; }
+    state.jobs.slice().reverse().forEach(function(j){
+      var div = document.createElement("div");
+      div.className = "preset-item";
+      div.style.alignItems = "flex-start";
+      div.style.flexDirection = "column";
+      var count = (j.data.indications||[]).length;
+      var sub = (j.savedAt ? new Date(j.savedAt).toLocaleDateString() : "") + " &middot; " + count + " indication" + (count===1?"":"s");
+      div.innerHTML =
+        '<div style="display:flex; width:100%; justify-content:space-between; align-items:center; gap:8px;">'+
+          '<span class="name">'+j.name+'</span>'+
+          '<span class="actions"><button class="load-btn" data-id="'+j.id+'">Load</button><button class="del-btn" data-id="'+j.id+'">Delete</button></span>'+
+        '</div>'+
+        '<span class="hint" style="font-size:11px; color:var(--sub);">'+sub+'</span>';
+      wrap.appendChild(div);
+    });
+    wrap.querySelectorAll(".load-btn").forEach(function(b){ b.addEventListener("click", function(){ loadJob(this.dataset.id); }); });
+    wrap.querySelectorAll(".del-btn").forEach(function(b){ b.addEventListener("click", function(){ deleteJob(this.dataset.id); }); });
+  }
+  function loadJob(id){
+    var j = state.jobs.find(function(x){ return x.id===id; });
+    if(!j) return;
+    if(!window.confirm('Load "'+j.name+'"? This replaces the current probe, shaft, indications and job details — save the current inspection first if you want to keep it.')) return;
+    var d = j.data;
+    state.probe = deepCopy(d.probe);
+    state.velocity = d.velocity;
+    state.scan = deepCopy(d.scan);
+    state.sections = deepCopy(d.sections);
+    state.indications = deepCopy(d.indications);
+    state.job = deepCopy(d.job);
+    bindProbeForm(); renderSections(); renderRadialSelect(); refreshScanConfigUI(); bindJobForm(); renderAnalysis();
+    save();
+  }
+  function deleteJob(id){
+    if(!window.confirm("Delete this saved inspection? This can't be undone.")) return;
+    state.jobs = state.jobs.filter(function(x){ return x.id!==id; });
+    save(); renderJobsList();
+  }
+  $("saveJobBtn").addEventListener("click", function(){
+    var nameInput = $("jobSaveName");
+    var name = nameInput.value.trim() || state.job.jobNumber || state.job.componentId || ("Inspection "+(state.jobs.length+1));
+    state.jobs.push({
+      id: uid(), name: name, savedAt: Date.now(),
+      data: {
+        probe: deepCopy(state.probe), velocity: state.velocity, scan: deepCopy(state.scan),
+        sections: deepCopy(state.sections), indications: deepCopy(state.indications), job: deepCopy(state.job)
+      }
+    });
+    nameInput.value = "";
+    save(); renderJobsList();
+  });
+  $("newInspectionBtn").addEventListener("click", function(){
+    if(!window.confirm("Start a new inspection? This clears the current probe, shaft, indications and job details. Save the current inspection first if you want to keep it.")) return;
+    state.probe = defaultProbe();
+    state.velocity = 5920;
+    state.scan = defaultScan();
+    state.sections = defaultSections();
+    state.indications = [];
+    state.job = defaultJob();
+    state.measuredTime = null;
+    state.tolerance = null;
+    bindProbeForm(); renderSections(); renderRadialSelect(); refreshScanConfigUI(); bindJobForm(); renderAnalysis();
+    save();
   });
 
   /* ---------- Shared shaft-profile drawing ---------- */
@@ -1253,6 +1381,19 @@
 
   function buildReportHTML(){
     var N = nearField(), ang = spreadAngleRad();
+    var jobRows = [
+      ["Job / work order #", state.job.jobNumber || "—"],
+      ["Component ID", state.job.componentId || "—"],
+      ["Client / site", state.job.client || "—"],
+      ["Inspection date", state.job.inspectionDate || "—"],
+      ["Inspector", state.job.inspector || "—"],
+      ["Certification level", state.job.certLevel || "—"],
+      ["Instrument", state.job.instrument || "—"],
+      ["Instrument serial #", state.job.instrumentSerial || "—"],
+      ["Instrument cal. due", state.job.calDueDate || "—"],
+      ["Standard / procedure", state.job.standard || "—"],
+      ["Acceptance criteria", state.job.acceptanceCriteria || "—"]
+    ];
     var probeRows = [
       ["Name", state.probe.name || "—"],
       ["Shape", state.probe.shape==="circular" ? "Circular" : "Rectangular"],
@@ -1304,6 +1445,8 @@
     var html = "";
     html += "<h1>Ultrasonic Shaft Inspection Report</h1>";
     html += "<div class='meta'>Generated "+new Date().toLocaleString()+"</div>";
+    html += "<h2>Job / Inspection Details</h2>"+table(["Field","Value"], jobRows);
+    if(state.job.notes) html += "<p><strong>Notes:</strong> "+state.job.notes+"</p>";
     html += "<h2>Probe</h2>"+table(["Parameter","Value"], probeRows);
     html += "<h2>Shaft Geometry</h2>"+table(["Section","OD","Length","ID","Position from near end"], sectionRows);
     html += "<h2>Scan Configuration</h2>"+table(["Parameter","Value"], scanRows);
@@ -1375,6 +1518,8 @@
     renderRadialSelect();
     renderProbePresets();
     renderShaftPresets();
+    bindJobForm();
+    renderJobsList();
     refreshScanConfigUI();
     renderAnalysis();
     $("backupStatus").innerHTML = '<span class="flag-ok">Backup restored.</span>';
@@ -1442,6 +1587,8 @@
   renderRadialSelect();
   renderProbePresets();
   renderShaftPresets();
+  bindJobForm();
+  renderJobsList();
   refreshScanConfigUI();
   showView("probe");
 })();
